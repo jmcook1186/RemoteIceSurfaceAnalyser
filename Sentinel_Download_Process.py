@@ -13,8 +13,12 @@ from collections import OrderedDict
 from sentinelsat import SentinelAPI
 from datetime import date
 from azure.storage.blob import BlockBlobService, PublicAccess
+import numpy as np
 import os
 import shutil
+import fnmatch
+import glob
+
 
 
 
@@ -52,7 +56,7 @@ def download_L1C(L1Cpath, tile, dates):
           "\n****************** \n\n {}".format(len(L1Cfiles),L1Cfiles))
 
     # download all files
-    api.download_all(products, directory_path = L1Cpath)
+    #api.download_all(products, directory_path = L1Cpath)
 
 
     return L1Cfiles
@@ -78,7 +82,9 @@ def process_L1C_to_L2A(L1C_path, L1Cfiles, unzip_files = True, removeL1C = True,
 
         # process L1C to L2A
         sen2cor = str(
-            '/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(L1C) + ' --resolution=20')
+            '/home/joe/Sen2Cor/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(
+                L1C) + ' --resolution=20')
+            # '/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(L1C) + ' --resolution=20')
         os.system(sen2cor)
 
     return
@@ -105,7 +111,7 @@ def remove_L1C(L1Cpath):
 
 
 
-def send_to_blob(blob_account_name, blob_account_key, tile):
+def send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=False):
 
     """
     Function uploads processed L2A products to blob storage. Check if container matching tile name already exists -if so
@@ -116,30 +122,104 @@ def send_to_blob(blob_account_name, blob_account_key, tile):
     :param tile:
     :return:
     """
+
     block_blob_service = BlockBlobService(account_name=blob_account_name, account_key=blob_account_key)
 
-    container_name = tile[0].lower() #convert string to lower case because Azure blobs named in lower case
+    tile = tile[0]
+
+    container_name = tile.lower() #convert string to lower case because Azure blobs named in lower case
 
     local_path = L1Cpath
 
-    containers = block_blob_service.list_containers()
+    # find files to upload and append names to list
+    for folder in os.listdir(local_path):
 
-    if any(tile[0].lower() in filenames for filenames in containers):
-        # add files to existing container matching tile name
-        for file in os.listdir(local_path):
-            block_blob_service.create_blob_from_path(container_name, file, os.path.join(local_path, file))
+        file_names = []
+        file_paths = []
+        filtered_paths = []
+        filtered_names = []
 
-    else:
-        # Create a container with the tile as filename, then add files.
-        block_blob_service.create_container(container_name)
-        for file in os.listdir(local_path):
-            block_blob_service.create_blob_from_path(container_name,file,os.path.join(local_path,file))
+        # append all file paths and names to list, then filter to the relevant jp2 files
+        for (dirpath, dirnames, filenames) in os.walk(local_path):
+            file_paths += [os.path.join(dirpath, file) for file in filenames]
+            file_names += [name for name in filenames]
 
-    return
+        for path in fnmatch.filter(file_paths,"*.jp2"):
+                filtered_paths.append(path)
+
+        for file in fnmatch.filter(file_names,"*.jp2"):
+            filtered_names.append(file)
+
+
+        #' check for existing containers
+        existing_containers = block_blob_service.list_containers()
+
+        existing_container_names = []
+
+        for item in existing_containers:
+            existing_container_names.append(item.name)
+
+        if any(tile.lower() in p for p in existing_container_names):
+            print("*** CONTAINER {} ALREADY EXISTS IN STORAGE ACCOUNT ***".format(tile))
+
+            # add files to existing container matching tile name
+            for i in np.arange(0,len(filtered_paths)):
+                print("*** UPLOADING FOLDERS TO EXISTING CONTAINER {} ***".format(tile))
+                source = str(filtered_paths[i])
+                destination = str(folder+'/'+filtered_names[i])
+
+                try:
+                    block_blob_service.create_blob_from_path(container_name, destination, source)
+
+                except:
+                    "Uploading to blob failed"
+
+
+        else:
+            print("*** CONTAINER DOES NOT ALREADY EXIST. CREATING NEW CONTAINER {} ***".format(tile))
+            # Create a container with the tile as filename, then add files.
+            block_blob_service.create_container(container_name)
+            print("*** CONTAINER CREATED. UPLOADING FOLDERS TO NEW CONTAINER ***")
+
+            for i in np.arange(0, len(filtered_paths)):
+                source = str(filtered_paths[i])
+                destination = str(folder + '/' + filtered_names[i])
+
+                try:
+                    block_blob_service.create_blob_from_path(container_name, destination, source)
+
+                except:
+                    "Uploading to blob failed"
+
+    if check_blobs:
+
+        blob_list = []
+        print("Retrieving blobs in specified container...")
+        try:
+            content = block_blob_service.list_blobs(container_name)
+            print("******Blobs currently in the container:**********")
+            for blob in content:
+                blob_list.append(blob.name)
+
+        except:
+            print("Checking blobs failed")
+
+        print('\n *** Blobs currently stored in container {}:'.format(container_name))
+        print("\n",blob_list)
+
+        if any(folder in p for p in blob_list):
+            print("***** UPLOAD SUCCESSFUL: \n Folders in blob container match those sent by this script *****\n")
+            upload_status = 1
+        else:
+            upload_status = 0
+
+    else: upload_status = 1 # if check_blobs deselected, assume upload was successful (not recommended)
+
+    return upload_status
 
 
 
-def remove_L2A(L1Cpath): # delete unused L1C products
+def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
 
     """
     Once files have been sent to blob, remove them from local storage
@@ -150,11 +230,15 @@ def remove_L2A(L1Cpath): # delete unused L1C products
 
     files = glob.glob(str(L1Cpath+'*L2A*')) # find files containing "L1C"
 
-    for f in files:
-        try:
-            shutil.rmtree(f) # try removing using shutil.rmtree() (for unzipped files)
-        except:
-            os.remove(f) # if it can't be removed by shutil it is likely zipped - use os.remove()
+    if upload_status == 1:
+        for f in files:
+            try:
+                shutil.rmtree(f) # try removing using shutil.rmtree() (for unzipped files)
+            except:
+                os.remove(f) # if it can't be removed by shutil it is likely zipped - use os.remove()
+
+    else:
+        print("\n******* S2A FILES NOT UPLOADED TO BLOB: S2A FILES NOT DELETED FROM LOCAL STORAGE *******\n")
 
     return
 
@@ -173,20 +257,20 @@ blob_account_key = 'HwYM3ZVtNv3j14/3iF57Zb9qIA7O5DTcB9Xx7pEoG1Ctw0fqJ7W5/JMSxfzK
 alltiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEB', '22WEA', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
 
 # add tile name to 'completed tiles' when it has been downloaded and processed to L2A (manually, just to keep track)
-completed_tiles = ['22XDF','21XWD', "21XWC", '22WEV']
+completed_tiles = ['22XDF','21XWD', "21XWC", '22WEV', '22WEU', '22WEB']
 
 #tiles refers to those tiles to download now
-tile=['22WEV']
+tile=['22WEB']
 
 #set start and end dates
 startDate = date(2017,6,1)
-endDate = date(2017,6,30)
+endDate = date(2017,6,5)
 
 # dates creates a tuple from the user-defined start and end dates
 dates= (startDate, endDate)
 
 # set path to save downloads
-L1Cpath = '/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
+L1Cpath = '/home/joe/Desktop/Sentinel_Store/'#'/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
 
 
 
@@ -194,7 +278,7 @@ L1Cpath = '/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_Big
 #################################
 
 L1Cfiles = download_L1C(L1Cpath, tile, dates)
-process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True, removeL1C=True, cleanupL2A=True)
+#process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True, removeL1C=True, cleanupL2A=True)
 remove_L1C(L1Cpath)
-send_to_blob(blob_account_name, blob_account_key, tile)
-remove_L2A(L1Cpath)
+upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
+remove_L2A(L1Cpath, upload_status)

@@ -1,4 +1,19 @@
 
+"""
+This script pulls images relating to specific Sentinel-2 tiles on specific dates from Azure blob storage and classifies
+them using a random forest classifier trained on field spectroscopy data (see github.com/jmcook1186/IceSurfClassifiers).
+There is a sequence of quality control functions that determine whether the downloaded image is of sufficient quality to
+be used in the analysis or alternatively whether it should be discarded. Reasons for discarding include cloud cover, NaNs
+and insufficient ice relative to land or ocean in the image. The sensitivity to these factors is tuned by the user.
+
+Code runs in environment IceSurfClassifiers:
+
+conda create -n IceSurfClassifiers python=3.6 numpy matplotlib scikit-learn seaborn azure rasterio gdal pandas
+conda install -c conda-forge xarray georaster sklearn_xarray
+
+
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib as mpl
@@ -25,7 +40,7 @@ savepath = '/home/joe/Desktop/blobtest/outputs/'
 pickle_path = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl'
 Icemask_in = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif'
 Icemask_out = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/GIMP_MASK.nc'
-cloudProbThreshold = 20 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
+cloudProbThreshold = 50 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
 minimum_useable_area = 60 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
 download_problem_list =[] # empty list to append details of skipped tiles due to missing info
 QCList = [] # empty list to append details of skipped tiles due to cloud cover
@@ -552,9 +567,9 @@ def clear_img_directory(img_path):
 ####################### RUN FUNCTIONS ########################################
 
 
-dates = ['20170601','20170605','20170610','20170615','20170620','20170625','20170630','20170701','20170705','20170710','20170715','20170720','20170725','20170730', '20170805', '20170810', '20170815', '20170820','20170825','20170830']
+dates = ['20170601','20170605','20170610','20170615','20170620','20170625','20170630','20170701','20170705','20170710','20170715','20170720','20170725','20170730']
 
-for tile in ['22xwd']:
+for tile in ['22wev']:
 
     for date in dates:
 
