@@ -1,5 +1,6 @@
 
 """
+
 This script pulls images relating to specific Sentinel-2 tiles on specific dates from Azure blob storage and classifies
 them using a random forest classifier trained on field spectroscopy data (see github.com/jmcook1186/IceSurfClassifiers).
 There is a sequence of quality control functions that determine whether the downloaded image is of sufficient quality to
@@ -31,21 +32,9 @@ mpl.style.use('ggplot')
 plt.ioff()
 
 
-# DEFINE BLOB ACCESS, GLOBAL VARIABLES AND HARD-CODED PATHS TO FILES
-
-blob_account_name = 'tothepoles'
-blob_account_key = 'HwYM3ZVtNv3j14/3iF57Zb9qIA7O5DTcB9Xx7pEoG1Ctw0fqJ7W5/JMSxfzKwp5tULqYVqH42dbKigvRg2QJqw=='
-img_path = '/home/joe/Desktop/blobtest/'
-savepath = '/home/joe/Desktop/blobtest/outputs/'
-pickle_path = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl'
-Icemask_in = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif'
-Icemask_out = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/GIMP_MASK.nc'
-cloudProbThreshold = 50 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
-minimum_useable_area = 60 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
-download_problem_list =[] # empty list to append details of skipped tiles due to missing info
-QCList = [] # empty list to append details of skipped tiles due to cloud cover
-files_used = [] # empty list for appending tile an ddate of files used in analysis
-masterDF = pd.DataFrame()
+######################################################################################
+############################ DEFINE FUNCTIONS ########################################
+######################################################################################
 
 
 def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_key):
@@ -91,7 +80,7 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
 
     # filter total bloblist to just jp2s, then just for the specified date
     filtered_by_type = [string for string in bloblist if '_20m.jp2' in string]
-    filtered_bloblist = [string for string in filtered_by_type if date in string]
+    filtered_bloblist = [string for string in filtered_by_type if str("L2A_" + date) in string]
 
 
     # download the files in the filtered list
@@ -116,6 +105,7 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
     # relevant files now downloaded from blob and stored in the savepath folder
 
     return filtered_bloblist, download_flag
+
 
 
 def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
@@ -174,10 +164,11 @@ def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
     Cloudmask = xr.open_rasterio(cloudmaskpath)
     Cloudmask = xr.DataArray.squeeze(Cloudmask,'band')
     # set pixels where probability of cloud < threshold to 0
-    Cloudmask = Cloudmask.where(Cloudmask.values >= cloudProbThreshold, 1)
-    Cloudmask = Cloudmask.where(Cloudmask.values < cloudProbThreshold, 0)
+    Cloudmask = Cloudmask.where(Cloudmask.values >= cloudProbThreshold, 0)
+    Cloudmask = Cloudmask.where(Cloudmask.values < cloudProbThreshold, 1)
 
     return Icemask, Cloudmask
+
 
 
 def img_quality_control(Icemask, Cloudmask, minimum_useable_area):
@@ -212,14 +203,14 @@ def img_quality_control(Icemask, Cloudmask, minimum_useable_area):
     NaNimg = glob.glob(str(img_path + '*B02_20m.jp2'))  # find cloud mask layer in filtered S2 image directory
     NaNimg = xr.open_rasterio(NaNimg[0])
     NaNnumpy = np.ravel(np.squeeze(NaNimg.values))
-    NaNcover = ((len(NaNnumpy[NaNnumpy==0]))/(len(NaNnumpy[NaNnumpy])))*100
+    NaNcover = ((len(NaNnumpy[NaNnumpy==0]))/(len(NaNnumpy)))*100
 
     # filter ravel'd masks and append to bad_pixel_counter wherever there is cloud, NaN or no ice.
     [bad_pixel_counter.append(i) for i in np.arange(0, len(Iceravel), 1) if
      (Iceravel[i] == 0 or Cloudravel[i] == 1 or NaNnumpy[i] == 1)]
 
     # calculate % of total pixels that are bad
-    useable_area = 100- ((len(bad_pixel_counter)/len(Cloudravel))*100)
+    useable_area = 100 - ((len(bad_pixel_counter)/len(Cloudravel))*100)
     print("{} % of the image is composed of useable pixels".format(np.round(useable_area,2)))
 
     if (useable_area < minimum_useable_area):
@@ -248,7 +239,6 @@ def load_model_and_images(img_path, pickle_path, Icemask, Cloudmask):
     :return: clf: classifier loaded in from .pkl file;
 
     """
-
     # Sentinel 2 dataset
     # create xarray dataset with all bands loaded from jp2s. Values are reflectance.
     fileB2 = glob.glob(str(img_path + '*B02_20m.jp2'))
@@ -522,25 +512,45 @@ def albedo_report(masterDF, tile, date, savepath, save_albedo_data=False):
     return masterDF
 
 
-def concat_all_dates(savepath):
+def concat_all_dates(savepath, tile):
 
     """
-    NEED TO WRITE FUNCTION TO COLLATE ALL INDIVIDUAL XR DATA SUMMARIES INTO ONE MASTER ARRAY
+    Function concatenates xarrays from individual dates into one master dataset for each tile.
+    The dimensions are: date, classID and metric
+
+    The coordinates on each dimension are accessed by their index in the following lists:
+
+    classID [0: SN, 1: WAT , 2: CC, 3: CI, 4: LA, 5: HA]
+    metric [0: count, 1: mean, 2: std, 3: min, 4: 25% , 5: 50% , 6: 75%, 7: max ]
+    date [0: 1st date, 1: 2nd date, 2: 3rd date]
+
+    so to access the total number of pixels classed as snow on the first date:
+    >> concat_dataset[0,0,0].values
+
+    to access the mean albedo of cryoconite covered pixels on all dates:
+    >> concat_dataset[2,1,:].values
+
     :param masterDF:
     :return:
     """
 
-    datasets = []
+    data = []
     ds = []
 
     xrlist = glob.glob(str(savepath + 'summary_data_' +'*.nc')) # find all summary datasets
     ds = []
     for i in np.arange(0,len(xrlist),1):
         ds = xr.open_dataarray(xrlist[i])
-        datasets.append(ds)
-    concat_dataset = xr.concat(datasets, dim='date')
+        data.append(ds)
 
-    return concat_dataset
+    concat_data = xr.concat(data, dim='date')
+
+    savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
+    concat_data.to_netcdf(savefilename,'w')
+
+    concat_data = None  #flush
+
+    return
 
 
 
@@ -563,17 +573,50 @@ def clear_img_directory(img_path):
 
 
 
-##############################################################################
-####################### RUN FUNCTIONS ########################################
 
+###################################################################################
+######## DEFINE BLOB ACCESS, GLOBAL VARIABLES AND HARD-CODED PATHS TO FILES #######
+###################################################################################
 
-dates = ['20170601','20170605','20170610','20170615','20170620','20170625','20170630','20170701','20170705','20170710','20170715','20170720','20170725','20170730']
+blob_account_name = 'tothepoles'
+blob_account_key = 'HwYM3ZVtNv3j14/3iF57Zb9qIA7O5DTcB9Xx7pEoG1Ctw0fqJ7W5/JMSxfzKwp5tULqYVqH42dbKigvRg2QJqw=='
+img_path = '/home/joe/Desktop/blobtest/'
+pickle_path = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl'
+Icemask_in = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif'
+Icemask_out = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/GIMP_MASK.nc'
+cloudProbThreshold = 50 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
+minimum_useable_area = 40 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
+download_problem_list =[] # empty list to append details of skipped tiles due to missing info
+QCList = [] # empty list to append details of skipped tiles due to cloud cover
+files_used = [] # empty list for appending tile an ddate of files used in analysis
+masterDF = pd.DataFrame()
+
+dates = ['20170705', '20170715']
+
+###################################################################################
+############################ RUN FUNCTIONS ########################################
+###################################################################################
+
 
 for tile in ['22wev']:
 
+    #first create directory to save outputs to
+    dirName = str(img_path+'outputs/'+tile+"/")
+
+    # Create target Directory if it doesn't already exist
+    if not os.path.exists(dirName):
+        os.mkdir(dirName)
+        print("Directory ", dirName, " Created ")
+    else:
+        print("Directory ", dirName, " already exists")
+
+    # make DirName the path to save files to
+    savepath = dirName
+
     for date in dates:
 
-        print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile,date))
+        print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
+
         # query blob for files in tile and date range
         filtered_bloblist, download_flag = download_imgs_by_date(tile = tile, date = date, img_path = img_path,
                                             blob_account_name = blob_account_name, blob_account_key = blob_account_key)
@@ -583,8 +626,6 @@ for tile in ['22wev']:
 
             print("\n*** No Download flag raised *** \n *** Checking cloud, ice and NaN cover ***")
 
-            files_used.append(str(tile+date))
-
             Icemask, Cloudmask = format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold)
 
             QCflag, Cloudcover, Icecover, NaNcover, useable_area = img_quality_control(Icemask, Cloudmask, minimum_useable_area)
@@ -593,9 +634,9 @@ for tile in ['22wev']:
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
             if QCflag == False:
 
-                print("\n *** No cloud or ice cover flags: proceeding with image analysis")
+                print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
 
-                try: # use try/except so that any images that slip through QC and then fail do not break run
+                try: # use try/except so that any images that slips through QC and then fail do not break run
 
                     clf = load_model_and_images(img_path, pickle_path, Icemask, Cloudmask)
 
@@ -603,22 +644,26 @@ for tile in ['22wev']:
 
                     masterDF = albedo_report(masterDF, tile, date, savepath, save_albedo_data=False)
 
-                    concat_dataset = concat_all_dates(savepath)
-
                 except:
 
-                    print("\n *** TILE {} DATE {} ANALYSIS ATTEMPTED AND FAILED: MOVING ON TO NEXT DATE \n".format(tile,date))
+                    print("\n *** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
 
             else:
                 print("\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(tile, date, np.round(useable_area,4)))
+
                 QCList.append('{}_{}'.format(tile,date))
 
         else:
 
             print("\n*** Download Flag Raised ***\n *** Skipping tile {} on {} due to download flag ***".format(tile, date))
+
             download_problem_list.append('{}_{}'.format(tile,date))
 
         clear_img_directory(img_path)
+
+    concat_dataset = concat_all_dates(savepath, tile)
+
+
 
 
 print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")

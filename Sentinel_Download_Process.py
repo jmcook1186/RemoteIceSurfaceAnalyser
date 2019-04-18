@@ -1,4 +1,5 @@
 """
+
 This function uses the sentinelsat python API to download batches of Sentinel 2 Level 1C images from SentinelHub,
 process them into L2A products using Sen2Cor and then save them to file.
 
@@ -18,7 +19,6 @@ import os
 import shutil
 import fnmatch
 import glob
-
 
 
 
@@ -43,11 +43,11 @@ def download_L1C(L1Cpath, tile, dates):
     products = OrderedDict()
 
     # loop through tiles and list all files in date range
-    for tilename in tile:
-        kw = query_kwargs.copy()
-        kw['tileid'] = tilename  # products after 2017-03-31
-        pp = api.query(**kw)
-        products.update(pp)
+
+    kw = query_kwargs.copy()
+    kw['tileid'] = tile  # products after 2017-03-31
+    pp = api.query(**kw)
+    products.update(pp)
 
     # keep metadata in pandas dataframe
     metadata = api.to_dataframe(products)
@@ -56,13 +56,13 @@ def download_L1C(L1Cpath, tile, dates):
           "\n****************** \n\n {}".format(len(L1Cfiles),L1Cfiles))
 
     # download all files
-    #api.download_all(products, directory_path = L1Cpath)
+    api.download_all(products, directory_path = L1Cpath)
 
 
     return L1Cfiles
 
 
-def process_L1C_to_L2A(L1C_path, L1Cfiles, unzip_files = True, removeL1C = True, cleanupL2A = True):
+def process_L1C_to_L2A(L1C_path, L1Cfiles, unzip_files = True):
     """
     This function is takes the downloaded L1C products from SentinelHub and converts them to L2A product using Sen2Cor.
     This is achieved as a batch job by iterating through the file names (L1Cfiles) stored in L1Cpath
@@ -81,10 +81,7 @@ def process_L1C_to_L2A(L1C_path, L1Cfiles, unzip_files = True, removeL1C = True,
 
 
         # process L1C to L2A
-        sen2cor = str(
-            '/home/joe/Sen2Cor/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(
-                L1C) + ' --resolution=20')
-            # '/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(L1C) + ' --resolution=20')
+        sen2cor = str('/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(L1C) + ' --resolution=20')
         os.system(sen2cor)
 
     return
@@ -125,8 +122,6 @@ def send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs
 
     block_blob_service = BlockBlobService(account_name=blob_account_name, account_key=blob_account_key)
 
-    tile = tile[0]
-
     container_name = tile.lower() #convert string to lower case because Azure blobs named in lower case
 
     local_path = L1Cpath
@@ -139,8 +134,10 @@ def send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs
         filtered_paths = []
         filtered_names = []
 
+        folder_path = str(local_path+folder+"/")
+
         # append all file paths and names to list, then filter to the relevant jp2 files
-        for (dirpath, dirnames, filenames) in os.walk(local_path):
+        for (dirpath, dirnames, filenames) in os.walk(folder_path):
             file_paths += [os.path.join(dirpath, file) for file in filenames]
             file_names += [name for name in filenames]
 
@@ -166,7 +163,7 @@ def send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs
             for i in np.arange(0,len(filtered_paths)):
                 print("*** UPLOADING FOLDERS TO EXISTING CONTAINER {} ***".format(tile))
                 source = str(filtered_paths[i])
-                destination = str(folder+'/'+filtered_names[i])
+                destination = str(folder+'/' + filtered_names[i])
 
                 try:
                     block_blob_service.create_blob_from_path(container_name, destination, source)
@@ -243,42 +240,41 @@ def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
     return
 
 
-######### DEFINE VARIABLES #########
-####################################
+
+########### DEFINE VARIABLES ############
+#########################################
 
 # Define tiles, dates and save path
 api = SentinelAPI('jmcook1186', 'V66e6XAEeMqzaY','https://scihub.copernicus.eu/apihub')
 
 # define blob access
-blob_account_name = 'tothepoles'
-blob_account_key = 'HwYM3ZVtNv3j14/3iF57Zb9qIA7O5DTcB9Xx7pEoG1Ctw0fqJ7W5/JMSxfzKwp5tULqYVqH42dbKigvRg2QJqw=='
+blob_account_name = XXX
+blob_account_key = XXX
 
 # all tiles refers to all the individual tiles that cover the GRUS dark zone
-alltiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEB', '22WEA', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
-
-# add tile name to 'completed tiles' when it has been downloaded and processed to L2A (manually, just to keep track)
-completed_tiles = ['22XDF','21XWD', "21XWC", '22WEV', '22WEU', '22WEB']
-
-#tiles refers to those tiles to download now
-tile=['22WEB']
+alltiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
 
 #set start and end dates
 startDate = date(2017,6,1)
-endDate = date(2017,6,5)
-
+endDate = date(2017,6,30)
 # dates creates a tuple from the user-defined start and end dates
 dates= (startDate, endDate)
 
 # set path to save downloads
-L1Cpath = '/home/joe/Desktop/Sentinel_Store/'#'/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
+L1Cpath = '/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
 
 
 
-######### RUN FUNCTIONS #########
-#################################
+############ RUN FUNCTIONS #############
+########################################
 
-L1Cfiles = download_L1C(L1Cpath, tile, dates)
-#process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True, removeL1C=True, cleanupL2A=True)
-remove_L1C(L1Cpath)
-upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
-remove_L2A(L1Cpath, upload_status)
+# loop through tiles
+for tile in ['22WEA']:
+
+    L1Cfiles = download_L1C(L1Cpath, tile, dates)
+    process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True)
+    remove_L1C(L1Cpath)
+    upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
+    remove_L2A(L1Cpath, upload_status)
+
+print("\n\n********** FINISHED ALL TILES ***********\n")
