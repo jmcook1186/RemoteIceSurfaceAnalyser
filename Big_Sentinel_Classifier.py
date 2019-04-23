@@ -93,10 +93,11 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
     # Check downloaded files to make sure all bands plus the cloud mask are present in the wdir
     # Raises download flag (Boolean true) and reports to console if there is a problem
 
-    if len(glob.glob(str(img_path + '*_20m.jp2'))) < 13 or len(glob.glob(str(img_path + '*CLD_20m.jp2'))) == 0:
+    if len(glob.glob(str(img_path + '*_B*_20m.jp2'))) < 9 or len(glob.glob(str(img_path + '*CLD_20m.jp2'))) == 0:
         download_flag = True
 
-        print("\n *** DOWNLOAD QC FLAG RAISED *** \n *** Insufficient number of image files downloaded or cloud layer missing***")
+        print("\n *** DOWNLOAD QC FLAG RAISED *** \n *** There may have been no overpass on this date, or there is a"
+              " band image or cloud layer missing from the downloaded directory ***")
 
     else:
         download_flag = False
@@ -591,7 +592,7 @@ QCList = [] # empty list to append details of skipped tiles due to cloud cover
 files_used = [] # empty list for appending tile an ddate of files used in analysis
 masterDF = pd.DataFrame()
 
-dates = ['20170705', '20170715']
+dates = ['20170605','20170610','20170615','20170625','20170630','20170705', '20170715', '20170725', '20170805', '20170815']
 
 ###################################################################################
 ############################ RUN FUNCTIONS ########################################
