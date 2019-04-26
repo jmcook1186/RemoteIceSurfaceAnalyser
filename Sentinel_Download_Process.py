@@ -1,12 +1,19 @@
 """
+The user defines a list of relevant tiles and dates. This script then accesses the SentinelHub store and downloads the
+relevant tiles as zipped L1C products and saves them locally. The local file is then converted to the L2A product using
+the ESA Sen2Cor processor, overwriting the L1C product. The L2A product is then uploaded to blob storage and then erased
+from the local disk.
 
-This function uses the sentinelsat python API to download batches of Sentinel 2 Level 1C images from SentinelHub,
-process them into L2A products using Sen2Cor and then save them to file.
+In this script, two batches of dates are provided for each tile. This is to enable flushing of the local disk before too
+many tiles are saved. The files are large, and more than one month's worth of images can lead to the local disk filling
+up causing the script to crash. To avoid this, I iterate through month by month instead of providing a large date range.
 
-NB Each product is 600MB zipped, up to 800MB when converted to L2A.Recommend downloading batches of ~20 tiles, sending
-to blob storage then deleting from hard drive, then repeating batch.
+Blob storage is organised into separate containers for each tile with a separate folder for each date saved inside.
 
-Takes about 1 minute to download each tile on Azure ES20_v3 Linux DSVM, then up to 15 minutes to process L1Cto L2A
+tile
+|--date
+    |--individual band jp2s
+
 
 """
 
@@ -21,6 +28,9 @@ import fnmatch
 import glob
 
 
+#################################################################
+################## DEFINE FUNCTIONS #############################
+#################################################################
 
 def download_L1C(L1Cpath, tile, dates):
     """
@@ -249,56 +259,67 @@ def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
     return
 
 
-
-
-########### DEFINE VARIABLES ############
-#########################################
+####################################################
+################ DEFINE VARIABLES ##################
+####################################################
 
 
 # all tiles refers to all the individual tiles that cover the GRUS dark zone
 alltiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
+tiles = ['22WET',"22WES","22WED", "22WEB", "22VER", "21XXA", "21XWB", "21XVD"]
+year = 2017
+months = [6,7,8] # specify months of the year to iterate through
 
-
-############ RUN FUNCTIONS #############
-########################################
-
-# loop through tiles
-tiles =  ['22WED', '21XWB']
+# set up loop to iterate through tiles
 
 for i in np.arange(0,len(tiles),1):
 
-    # set start and end dates
-    startDate = date(2017, 6, 1)
-    endDate = date(2017, 6, 30)
+    # set up loop to iterate through batches of dates
+    for ii in np.arange(0,len(months),1):
 
-    # dates creates a tuple from the user-defined start and end dates
-    dates = (startDate, endDate)
+        month = months[ii]
+        # set start and end dates
+        startDate = date(year, month, 1)
+        # adjust end date for number of days in month
+        if month in [1,3,5,7,8,10,12]:
+            endDate = date(year,month,31)
+        elif month in [4,6,9,11]:
+            endDate = date(year,month,30)
+        elif month in [2]:
+            endDate = date(year,month,28)
 
-    # set path to save downloads
-    L1Cpath = '/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
+        # dates creates a tuple from the user-defined start and end dates
+        dates = (startDate, endDate)
 
-    # Define tiles, dates and save path
-    api = SentinelAPI('jmcook1186', 'V66e6XAEeMqzaY', 'https://scihub.copernicus.eu/apihub')
+        # set path to save downloads
+        L1Cpath = '/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
 
-    # define blob access
-    blob_account_name = 'tothepoles'
-    blob_account_key = 'HwYM3ZVtNv3j14/3iF57Zb9qIA7O5DTcB9Xx7pEoG1Ctw0fqJ7W5/JMSxfzKwp5tULqYVqH42dbKigvRg2QJqw=='
+        # Define tiles, dates and save path
+        api = SentinelAPI('jmcook1186', 'V66e6XAEeMqzaY', 'https://scihub.copernicus.eu/apihub')
 
-    tile = tiles[i]
+        # define blob access
+        blob_account_name = 'tothepoles'
+        blob_account_key = 'HwYM3ZVtNv3j14/3iF57Zb9qIA7O5DTcB9Xx7pEoG1Ctw0fqJ7W5/JMSxfzKwp5tULqYVqH42dbKigvRg2QJqw=='
 
-    print("\n CURRENT TILE_ID = ", tile)
+        tile = tiles[i]
 
-    try:
-        L1Cfiles = download_L1C(L1Cpath, tile, dates)
-        process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True)
-        remove_L1C(L1Cpath)
-        upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
-        remove_L2A(L1Cpath, upload_status)
+        print("\n CURRENT TILE_ID = ", tile)
 
-        print("\n TILE ID {} FINISHED".format(tile))
-        print('\n MOVING TO NEXT TILE '.center(80, 'X'), '\n', 'X'.center(80, 'X'))
+        ####################################################
+        ################# RUN FUNCTIONS ####################
+        ####################################################
 
-    except:
-        print("\n No images found for this tile on the specified dates")
+        try: # use try/except so that any problems with individual tiles do not crash entire run
+            L1Cfiles = download_L1C(L1Cpath, tile, dates)
+            process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True)
+            remove_L1C(L1Cpath)
+            upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
+            remove_L2A(L1Cpath, upload_status)
+
+            print("\n TILE ID {} FINISHED".format(tile))
+            print('\n MOVING TO NEXT TILE '.center(80, 'X'), '\n', 'X'.center(80, 'X'))
+
+        except:
+            print("\n No images found for this tile on the specified dates")
 
 print('X'.center(80,'X'), ' FINISHED ALL TILES '.center(80,'X'),'\n','X'.center(80,'X'))
