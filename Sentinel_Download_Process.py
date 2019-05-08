@@ -265,8 +265,7 @@ def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
 
 
 # all tiles refers to all the individual tiles that cover the GRUS dark zone
-alltiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
-tiles = ['22WET',"22WES","22WED", "22WEB", "22VER", "21XXA", "21XWB", "21XVD"]
+tiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
 year = 2017
 months = [6,7,8] # specify months of the year to iterate through
 

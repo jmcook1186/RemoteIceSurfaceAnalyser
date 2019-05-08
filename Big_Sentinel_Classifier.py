@@ -498,11 +498,10 @@ def albedo_report(masterDF, tile, date, savepath, save_albedo_data=False):
         summaryxr = xr.DataArray(summaryDF, dims=('classID', 'metric'),
                                  coords={'classID': ['SN', 'WAT', 'CC', 'CI', 'LA', 'HA'],
                                          'metric': ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max'],
-                                         }, attrs={'date':date})
+                                         }, attrs={'date': date})
 
         summaryxr.to_netcdf(str(savepath+'summary_data_{}_{}.nc'.format(tile, date)))
 
-        # To query the summary data use the following syntax
         algal_coverage = (sum(summaryxr.sel(classID=['HA', 'LA'], metric='count')) / (
             sum(summaryxr.sel(classID=['HA','LA','WAT', 'CC', 'CI'], metric='count').values))) * 100
 
@@ -591,16 +590,47 @@ download_problem_list =[] # empty list to append details of skipped tiles due to
 QCList = [] # empty list to append details of skipped tiles due to cloud cover
 files_used = [] # empty list for appending tile an ddate of files used in analysis
 masterDF = pd.DataFrame()
+dates = []
 
-dates = ['20170605','20170610','20170615','20170625','20170630','20170705', '20170715', '20170725', '20170805', '20170815']
+
+###################################################################################
+######################### SET TILE AND DATE RANGE #################################
+###################################################################################
+
+# list all tiles to include
+tiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC',
+         '21XVD','22WES', '22VER', '22WET']
+
+# specify year and month - currently automatically includes all days in each month (i.e. days not user defined).
+years = [2017] # specify years
+months = [6,7,8] # specify months of the year
+
+# set up dates (this will create list of all days in year/month range specified above)
+for year in years:
+    for month in months:
+
+        # adjust end date for number of days in month
+        if month in [1,3,5,7,8,10,12]:
+            endDate = 31
+        elif month in [4,6,9,11]:
+            endDate = 30
+        elif month in [2]:
+            endDate = 28
+
+        days = np.arange(1,endDate+1,1)
+
+        for day in days:
+            date = str(str(year)+str(month).zfill(2)+str(day).zfill(2))
+            dates.append(date)
+
 
 ###################################################################################
 ############################ RUN FUNCTIONS ########################################
 ###################################################################################
 
 
-for tile in ['22wev']:
-
+for tile in tiles:
+    tile = tile.lower() #azure blob store is case sensitive: force lower case
     #first create directory to save outputs to
     dirName = str(img_path+'outputs/'+tile+"/")
 
@@ -663,8 +693,6 @@ for tile in ['22wev']:
         clear_img_directory(img_path)
 
     concat_dataset = concat_all_dates(savepath, tile)
-
-
 
 
 print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
