@@ -194,21 +194,27 @@ def img_quality_control(Icemask, Cloudmask, minimum_useable_area):
     :return NaNcover: % of total image comprising NaNs
 
     """
+
+    #initial image check: is there sufficient coverage in the downloaded tile?
+    total_pixels = 30140100 # (image size 5490 * 5490)
+    S2file = glob.glob(str(img_path + '*B02_20m.jp2')) # find band2 image
+    S2array = xr.open_rasterio(S2file[0]) # open image
+    NaNimg = S2array.where(S2array>0) # replace values <=0 with nan
+    noNaNs = NaNimg.count() #count non nans
+    non_Nan_cover = (noNaNs/total_pixels)*100 # non nans/total = initial useable pixels
+    NaNcover = 100-non_Nan_cover
+
     bad_pixel_counter = [] #set up empty list to count bad pixels into
 
     Cloudravel = np.ravel(Cloudmask)
     Iceravel = np.ravel(Icemask)
     CloudCover = (len(Cloudravel[Cloudravel==1])/len(Cloudravel))*100 # % image obscured by cloud
     IceCover = (len(Iceravel[Iceravel==1])/len(Iceravel))*100 # % image covered by ice
-
-    NaNimg = glob.glob(str(img_path + '*B02_20m.jp2'))  # find cloud mask layer in filtered S2 image directory
-    NaNimg = xr.open_rasterio(NaNimg[0])
-    NaNnumpy = np.ravel(np.squeeze(NaNimg.values))
-    NaNcover = ((len(NaNnumpy[NaNnumpy==0]))/(len(NaNnumpy)))*100
+    NaNravel = np.squeeze(np.ravel(np.array(NaNimg.values)))
 
     # filter ravel'd masks and append to bad_pixel_counter wherever there is cloud, NaN or no ice.
     [bad_pixel_counter.append(i) for i in np.arange(0, len(Iceravel), 1) if
-     (Iceravel[i] == 0 or Cloudravel[i] == 1 or NaNnumpy[i] == 1)]
+     (Iceravel[i] == 0 or Cloudravel[i] == 1 or np.isnan(NaNravel[i]))]
 
     # calculate % of total pixels that are bad
     useable_area = 100 - ((len(bad_pixel_counter)/len(Cloudravel))*100)
@@ -520,15 +526,19 @@ def concat_all_dates(savepath, tile):
 
     The coordinates on each dimension are accessed by their index in the following lists:
 
+    date [0: 1st date, 1: 2nd date, 2: 3rd date]
     classID [0: SN, 1: WAT , 2: CC, 3: CI, 4: LA, 5: HA]
     metric [0: count, 1: mean, 2: std, 3: min, 4: 25% , 5: 50% , 6: 75%, 7: max ]
-    date [0: 1st date, 1: 2nd date, 2: 3rd date]
+
+
+    The order of the indexes is: concat_data[date, ID, metric]
 
     so to access the total number of pixels classed as snow on the first date:
     >> concat_dataset[0,0,0].values
 
     to access the mean albedo of cryoconite covered pixels on all dates:
-    >> concat_dataset[2,1,:].values
+    >> concat_dataset[:,2,1].values
+
 
     :param masterDF:
     :return:
@@ -536,14 +546,17 @@ def concat_all_dates(savepath, tile):
 
     data = []
     ds = []
+    dates = []
 
-    xrlist = glob.glob(str(savepath + 'summary_data_' +'*.nc')) # find all summary datasets
-    ds = []
+    xrlist = glob.glob(str(savepath + 'summary_data_' + '*.nc')) # find all summary datasets
+
     for i in np.arange(0,len(xrlist),1):
         ds = xr.open_dataarray(xrlist[i])
         data.append(ds)
+        date = ds.date
+        dates.append(date)
 
-    concat_data = xr.concat(data, dim='date')
+    concat_data = xr.concat(data, dim=pd.Index(dates,name='date'))
 
     savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
     concat_data.to_netcdf(savefilename,'w')
@@ -585,10 +598,10 @@ pickle_path = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_cl
 Icemask_in = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif'
 Icemask_out = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/GIMP_MASK.nc'
 cloudProbThreshold = 50 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
-minimum_useable_area = 40 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
+minimum_useable_area = 50 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
 download_problem_list =[] # empty list to append details of skipped tiles due to missing info
-QCList = [] # empty list to append details of skipped tiles due to cloud cover
-files_used = [] # empty list for appending tile an ddate of files used in analysis
+QC_reject_list = [] # empty list to append details of skipped tiles due to cloud cover
+good_tile_list = [] # empty list to append tiles used in analysis
 masterDF = pd.DataFrame()
 dates = []
 
@@ -598,12 +611,12 @@ dates = []
 ###################################################################################
 
 # list all tiles to include
-tiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC',
-         '21XVD','22WES', '22VER', '22WET']
+tiles = ['22XDF']#, '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC',
+         #'21XVD','22WES', '22VER', '22WET']
 
 # specify year and month - currently automatically includes all days in each month (i.e. days not user defined).
-years = [2017] # specify years
-months = [6,7,8] # specify months of the year
+years = [2016] # specify years
+months = [6] # specify months of the year
 
 # set up dates (this will create list of all days in year/month range specified above)
 for year in years:
@@ -625,7 +638,7 @@ for year in years:
 
 
 ###################################################################################
-############################ RUN FUNCTIONS ########################################
+############### RUN FUNCTIONS & HEALTHCHECKS ######################################
 ###################################################################################
 
 
@@ -667,6 +680,8 @@ for tile in tiles:
 
                 print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
 
+                good_tile_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
+
                 try: # use try/except so that any images that slips through QC and then fail do not break run
 
                     clf = load_model_and_images(img_path, pickle_path, Icemask, Cloudmask)
@@ -682,7 +697,7 @@ for tile in tiles:
             else:
                 print("\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(tile, date, np.round(useable_area,4)))
 
-                QCList.append('{}_{}'.format(tile,date))
+                QC_reject_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
 
         else:
 
