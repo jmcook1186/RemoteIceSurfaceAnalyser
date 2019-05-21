@@ -32,7 +32,7 @@ import glob
 ################## DEFINE FUNCTIONS #############################
 #################################################################
 
-def download_L1C(L1Cpath, tile, dates):
+def download_L1C(L1Cpath, tile, dates, cloudcoverthreshold):
     """
     This function uses the sentinelsat API to download L1C products for tiles defined by "tile" in the date range
     specified by "dates". Prints number of files and their names to console.
@@ -48,7 +48,8 @@ def download_L1C(L1Cpath, tile, dates):
     query_kwargs = {
             'platformname': 'Sentinel-2',
             'producttype': 'S2MSI1C',
-            'date': dates}
+            'date': dates,
+            'cloudcoverpercentage': (0, cloudcoverthreshold)}
 
     products = OrderedDict()
 
@@ -65,13 +66,13 @@ def download_L1C(L1Cpath, tile, dates):
     print('\n',' DOWNLOADING {} FILES '.center(80, 'X').format(len(L1Cfiles)),'\n', 'X'.center(80, 'X'))
 
     # download all files
-    api.download_all(products, directory_path = L1Cpath)
+    #api.download_all(products, directory_path = L1Cpath)
 
 
     return L1Cfiles
 
 
-def process_L1C_to_L2A(L1C_path, L1Cfiles, unzip_files = True):
+def process_L1C_to_L2A(L1C_path, L1Cfiles, S2_resolution, unzip_files = True):
     """
     This function is takes the downloaded L1C products from SentinelHub and converts them to L2A product using Sen2Cor.
     This is achieved as a batch job by iterating through the file names (L1Cfiles) stored in L1Cpath
@@ -89,9 +90,12 @@ def process_L1C_to_L2A(L1C_path, L1Cfiles, unzip_files = True):
             os.system(unzip)
 
         # process L1C to L2A
-        sen2cor = str('/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(L1C) + ' --resolution=20')
-        os.system(sen2cor)
+        try:
+            sen2cor = str('/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/L2A_Process ' + L1C_path + '{}'.format(L1C) + ' --resolution={}'.format(S2_resolution))
+            os.system(sen2cor)
 
+        except:
+            print("Processing {} L1C to L2A failed. Skipping to next tile".format(L1C))
     return
 
 
@@ -266,8 +270,8 @@ def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
 
 # all tiles refers to all the individual tiles that cover the GRUS dark zone
 tiles = ['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC', '21XVD', '22WES', '22VER', '22WET']
-year = 2017
-months = [6,7,8] # specify months of the year to iterate through
+year = 2018
+months = [7,8] # specify months of the year to iterate through
 
 # set up loop to iterate through tiles
 
@@ -293,6 +297,12 @@ for i in np.arange(0,len(tiles),1):
         # set path to save downloads
         L1Cpath = '/data/home/tothepoles/PycharmProjects/IceSurfClassifiers/Sentinel_BigStore/'
 
+        # set desired resolution for processed Sentinel-2 L2A tile (can be 10, 20 or 60 m)
+        S2_resolution = 20
+
+        # set max cloud cover (if cloud cover exceeds this threshold the tile will not be downloaded)
+        cloudcoverthreshold = 30
+
         # Define tiles, dates and save path
         api = SentinelAPI('jmcook1186', 'V66e6XAEeMqzaY', 'https://scihub.copernicus.eu/apihub')
 
@@ -309,11 +319,11 @@ for i in np.arange(0,len(tiles),1):
         ####################################################
 
         try: # use try/except so that any problems with individual tiles do not crash entire run
-            L1Cfiles = download_L1C(L1Cpath, tile, dates)
-            process_L1C_to_L2A(L1Cpath,L1Cfiles, unzip_files=True)
-            remove_L1C(L1Cpath)
-            upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
-            remove_L2A(L1Cpath, upload_status)
+            L1Cfiles = download_L1C(L1Cpath, tile, dates, cloudcoverthreshold)
+            # process_L1C_to_L2A(L1Cpath, L1Cfiles, S2_resolution, unzip_files=True)
+            # remove_L1C(L1Cpath)
+            # upload_status = send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=True)
+            # remove_L2A(L1Cpath, upload_status)
 
             print("\n TILE ID {} FINISHED".format(tile))
             print('\n MOVING TO NEXT TILE '.center(80, 'X'), '\n', 'X'.center(80, 'X'))
