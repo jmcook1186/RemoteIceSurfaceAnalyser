@@ -515,7 +515,7 @@ def albedo_report(masterDF, tile, date, savepath, save_albedo_data=False):
 
         masterDF = masterDF.append(albedoDF, ignore_index=True)
 
-    return masterDF
+    return summaryDF, masterDF
 
 
 def concat_all_dates(savepath, tile):
@@ -530,7 +530,6 @@ def concat_all_dates(savepath, tile):
     classID [0: SN, 1: WAT , 2: CC, 3: CI, 4: LA, 5: HA]
     metric [0: count, 1: mean, 2: std, 3: min, 4: 25% , 5: 50% , 6: 75%, 7: max ]
 
-
     The order of the indexes is: concat_data[date, ID, metric]
 
     so to access the total number of pixels classed as snow on the first date:
@@ -539,6 +538,9 @@ def concat_all_dates(savepath, tile):
     to access the mean albedo of cryoconite covered pixels on all dates:
     >> concat_dataset[:,2,1].values
 
+    or alternatively use xr.sel() which allows indexing by label, e.g.:
+
+    concat_dataset.sel(classID = 'HA', metric = 'mean', date = '20160623')
 
     :param masterDF:
     :return:
@@ -556,7 +558,7 @@ def concat_all_dates(savepath, tile):
         date = ds.date
         dates.append(date)
 
-    concat_data = xr.concat(data, dim=pd.Index(dates,name='date'))
+    concat_data = xr.concat(data, dim=pd.Index(dates, name='date'))
 
     savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
     concat_data.to_netcdf(savefilename,'w')
@@ -597,26 +599,27 @@ img_path = '/home/joe/Desktop/blobtest/'
 pickle_path = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl'
 Icemask_in = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif'
 Icemask_out = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/GIMP_MASK.nc'
-cloudProbThreshold = 50 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
+cloudProbThreshold = 10 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
 minimum_useable_area = 50 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
+
+# set up empty lists and dataframes to append to
 download_problem_list =[] # empty list to append details of skipped tiles due to missing info
 QC_reject_list = [] # empty list to append details of skipped tiles due to cloud cover
 good_tile_list = [] # empty list to append tiles used in analysis
 masterDF = pd.DataFrame()
 dates = []
 
-
 ###################################################################################
 ######################### SET TILE AND DATE RANGE #################################
 ###################################################################################
 
 # list all tiles to include
-tiles = ['22XDF']#, '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC',
+tiles = ['22WEV']#['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB', '22WED', '21XWB', '21XXA', '21WEC',
          #'21XVD','22WES', '22VER', '22WET']
 
 # specify year and month - currently automatically includes all days in each month (i.e. days not user defined).
-years = [2016] # specify years
-months = [6] # specify months of the year
+years = [2016,2017,2018] # specify years
+months = [6,7,8] # specify months of the year
 
 # set up dates (this will create list of all days in year/month range specified above)
 for year in years:
@@ -631,7 +634,6 @@ for year in years:
             endDate = 28
 
         days = np.arange(1,endDate+1,1)
-
         for day in days:
             date = str(str(year)+str(month).zfill(2)+str(day).zfill(2))
             dates.append(date)
@@ -643,6 +645,7 @@ for year in years:
 
 
 for tile in tiles:
+
     tile = tile.lower() #azure blob store is case sensitive: force lower case
     #first create directory to save outputs to
     dirName = str(img_path+'outputs/'+tile+"/")
@@ -688,7 +691,7 @@ for tile in tiles:
 
                     ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True)
 
-                    masterDF = albedo_report(masterDF, tile, date, savepath, save_albedo_data=False)
+                    summaryDF, masterDF = albedo_report(masterDF, tile, date, savepath, save_albedo_data=False)
 
                 except:
 
@@ -707,9 +710,14 @@ for tile in tiles:
 
         clear_img_directory(img_path)
 
+    print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
     concat_dataset = concat_all_dates(savepath, tile)
 
+    # save logs to csv files
+    print("\n *** SAVING QC LOGS TO TXT FILES ***")
+    print("\n *** aborted_downloads.txt, rejected_by_qc.txt and good_tiles.txt saved to output folder ")
+    np.savetxt(str(savepath+"/aborted_downloads.csv"), download_problem_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath+"/rejected_by_qc.csv"), QC_reject_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath+"/good_tiles.csv"), good_tile_list, delimiter=",", fmt='%s')
 
-print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
-#final_dataset = collate_data_by_date(masterDF)
 print("\n ************************\n *** COMPLETED RUN  *** \n *********************")
