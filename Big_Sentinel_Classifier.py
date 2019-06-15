@@ -1,18 +1,12 @@
-
 """
-
 This script pulls images relating to specific Sentinel-2 tiles on specific dates from Azure blob storage and classifies
 them using a random forest classifier trained on field spectroscopy data (see github.com/jmcook1186/IceSurfClassifiers).
 There is a sequence of quality control functions that determine whether the downloaded image is of sufficient quality to
 be used in the analysis or alternatively whether it should be discarded. Reasons for discarding include cloud cover, NaNs
 and insufficient ice relative to land or ocean in the image. The sensitivity to these factors is tuned by the user.
-
 Code runs in environment IceSurfClassifiers:
-
 conda create -n IceSurfClassifiers python=3.6 numpy matplotlib scikit-learn seaborn azure rasterio gdal pandas
 conda install -c conda-forge xarray georaster sklearn_xarray
-
-
 """
 
 import numpy as np
@@ -31,36 +25,32 @@ from azure.storage.blob import BlockBlobService, PublicAccess
 mpl.style.use('ggplot')
 plt.ioff()
 
+
 ######################################################################################
 ############################ DEFINE FUNCTIONS ########################################
 ######################################################################################
+
 
 def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_key):
 
     """
     This function downloads subsets of images stored remotely in Azure blobs. The blob name is identical to the
     ESA tile ID. Inside each blob are images from every overpass made in June, July and August of the given year.
-
     The files in blob storage are L2A files, meaning the L1C product has been downloaded from Sentinel-Hub and
     processed for atmospheric conditions, spatial resolution etc using the Sen2cor command line tool.
-
     This function searches for the blob associated with "tile" and then filteres out a subset according to the prescribed
     date.
-
     A flags can be raised in this function. The script checks that the correct number of image files have been
     downloaded and that one of them is the cloud mask. If not, the flag is printed to the console and the files
     associated with that particular date for that tile are discarded. The tile and date info are appended to a list of
     failed downloads.
-
     :param tile: tile ID
     :param date: date of overpass
     :param img_path: path to folder where images and other temp files will be stored
     :param blob_account_name: account name for azure storage account where blobs are stored
     :param blob account key: accesskey for blob storage account
-
     :return filtered_blob_list: list of files to download
     :return download_flag: Boolean, if True then problem with download, files skipped
-
     """
 
     # define blob access
@@ -80,12 +70,12 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
     filtered_by_type = [string for string in bloblist if '_20m.jp2' in string]
     filtered_bloblist = [string for string in filtered_by_type if str("L2A_" + date) in string]
 
+
     # download the files in the filtered list
     for i in filtered_bloblist:
         print(i)
         block_blob_service.get_blob_to_path(tile,
-                                       i, str(img_path+i[-38:-4]+'.jp2'))
-
+                                         i, str(img_path+i[-38:-4]+'.jp2'))
         # index to -38 because this is the filename without paths to folders etc
 
     # Check downloaded files to make sure all bands plus the cloud mask are present in the wdir
@@ -94,40 +84,35 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
     if len(glob.glob(str(img_path + '*_B*_20m.jp2'))) < 9 or len(glob.glob(str(img_path + '*CLD_20m.jp2'))) == 0:
         download_flag = True
 
-        print("\n*** DOWNLOAD QC FLAG RAISED *** \n *** There may have been no overpass on this date, or there is a"
-              " resource missing from the downloaded directory ***")
+        print("\n *** DOWNLOAD QC FLAG RAISED *** \n *** There may have been no overpass on this date, or there is a"
+              " band image or cloud layer missing from the downloaded directory ***")
 
     else:
         download_flag = False
-        print("\n*** NO DOWNLOAD QC FLAG RAISED: ALL NECESSARY FILES AVAILABLE IN WDIR ***")
+        print("\n *** NO DOWNLOAD QC FLAG RAISED: ALL NECESSARY FILES AVAILABLE IN WDIR ***")
 
     # relevant files now downloaded from blob and stored in the savepath folder
 
     return filtered_bloblist, download_flag
 
 
+
 def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
 
-    """
+    """0
     Function to format the land/ice and cloud masks.
     First, the Greenland Ice Mapping Project (GIMP) mask is reprojected to match the coordinate system of the S2 files.
     The relevant tiles of the GIMP mask were stitched to create one continuous Boolean array in a separate script.
-
     The cloud mask is derived from the clpoud layer in the L2A product which is an array of probabilities (0 - 1) that
     each pixel is obscured by cloud. The variable cloudProbThreshold is a user defined value above which the pixel is
     given value 1, and below which it is given value 0, creating a Boolean cloud/not-cloud mask.
-
     :param img_path: path to image to use as projection template
     :param Icemask_in: file path to mask file
     :param Icemask_out: file path to save reprojected mask
     :param cloudProbThreshold: threshold probability of cloud for masking pixel
-
     :return Icemask: Boolean to mask out pixels outside the ice sheet boundaries
     :return Cloudmask: Boolean to mask out pixels obscured by cloud
-
     """
-
-    print("*** FORMATTING MASKS ***")
     cloudmaskpath_temp = glob.glob(str(img_path + '*CLD_20m.jp2')) # find cloud mask layer in filtered S2 image directory
     cloudmaskpath = cloudmaskpath_temp[0]
 
@@ -167,8 +152,6 @@ def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
     Cloudmask = Cloudmask.where(Cloudmask.values >= cloudProbThreshold, 0)
     Cloudmask = Cloudmask.where(Cloudmask.values < cloudProbThreshold, 1)
 
-    print("*** FINISHED FORMATTING MASKS ***")
-
     return Icemask, Cloudmask
 
 
@@ -178,55 +161,48 @@ def img_quality_control(Icemask, Cloudmask, minimum_useable_area):
     Function assesses image quality and raises flags if the image contains too little ice (i.e. mostly ocean, dry land
     or NaNs) or too much cloud cover.
 
-    NOTE: The quality control is fairly slow, especially the counting bad pixels into bad_pixel_counter, but it is faster
-    than analysing bad images and therefore worthwhile. There is likely a better way to achieve this by vectorising the
-    code rather than using the list comprehension employed here.
-
     :param Icemask: Boolean for masking non-ice areas
     :param Cloudmask: Boolean for masking out cloudy pixels
     :param CloudCoverThreshold: threshold value for % of total pixels obscured by cloud. If over threshold image not used
     :param IceCoverThreshold: threshold value for % of total pixels outside ice sheet boundaries. If over threshold image not used
     :param NaNthreshold: threshold value for % of total pixels comprised by NaNs. If over threshold image not used
-
     :return QCflag: quality control flag. Raised if cloud, non-ice or NaN pixels exceed threshold values.
     :return CloudCover: % of total image covered by cloud
     :return IceCover: % of total image covered by ice
     :return NaNcover: % of total image comprising NaNs
-
     """
     print("*** CHECKING DATA QUALITY ***")
 
     S2file = glob.glob(str(img_path + '*B02_20m.jp2')) # find band2 image (fairly arbitrary choice of band image)
 
-    with xr.open_rasterio(S2file[0]) as S2array:
-        # initial image check: is there sufficient coverage in the downloaded tile?
-        NaNimg = S2array.where(S2array>0) # replace values <=0 with nan
-        NaNcover = 100-((NaNimg.count()/NaNimg.size)*100) # non nans/total = initial useable pixels
+    with xr.open_rasterio(S2file[0]) as S2array: #open file
+
+        total_pixels = S2array.size
+        S2array = S2array.values # values to array
+        S2array[S2array > 0] = 1 # make binary (i.e all positive values become 1s)
+        S2array = np.squeeze(S2array) # reshape to match ice and cloudmasks (2d)
+        count_nans = total_pixels - np.count_nonzero(S2array)
+        percent_nans = (count_nans/total_pixels)*100
+        percent_non_nans = 100 - percent_nans
+
+        Icemask_inv = 1-Icemask
+        S2array_inv = 1-S2array
 
         # create xarray dataset with ice mask, cloud mask and NaN mask.
-        qc_ds = xr.Dataset({'Cloudmask': (('y','x'), Cloudmask.values),'Icemask': (('y','x'), Icemask.values),
-                            'NaNmask': (('y','x'), np.squeeze(NaNimg.values))})
+        qc_ds = xr.Dataset({'Cloudmask': (('y','x'), Cloudmask.values),'Icemask': (('y','x'), Icemask_inv),
+                            'NaNmask': (('y','x'), np.flip(S2array_inv,0))})
 
-        #fill NaNs with zeros
-        qc_ds2 = qc_ds.fillna(0)
-
-        # query the dataset for cloud and ice cover values
-        Cloudcount = qc_ds2.Cloudmask.where(qc_ds2.Cloudmask.values==1).count()
-        CloudCover = (Cloudcount/qc_ds2.Cloudmask.values.size)*100
-        Icecount = qc_ds2.Icemask.where(qc_ds2.Icemask.values==1).count()
-        IceCover = (Icecount/qc_ds2.Icemask.values.size)*100
-
-        # count all pixels where any of the QC flags are violated
-        bad_pixels = qc_ds2.where(
-            (qc_ds2.Cloudmask.values + qc_ds2.Icemask.values + qc_ds2.NaNmask.values) > 0).count()
-
-        # express as percentgae
-        bad_pixel_percent = (bad_pixels.Cloudmask.values / qc_ds.Cloudmask.size)*100
-        useable_area=100-bad_pixel_percent
+        # good pixels are zeros in all three layers, so if the sum of the three layers is >0, that pixel is bad because of
+        # either NaN, non-ice or cloud
+        ds_sum = qc_ds.Cloudmask.values+qc_ds.Icemask.values+qc_ds.NaNmask.values
+        bad_pixels = np.count_nonzero(ds_sum)
+        good_pixels = total_pixels - bad_pixels
+        unuseable_area = (bad_pixels/total_pixels)*100
+        useable_area = (good_pixels/total_pixels)*100
+        print('good = {}%, bad = {}%'.format(useable_area,unuseable_area))
 
     # report to console
     print("{} % of the image is composed of useable pixels".format(np.round(useable_area,2)))
-    print("Cloud Cover = ",CloudCover.values,"\nIce Cover = ",IceCover.values)
     print("*** FINISHED QUALITY CONTROL ***")
 
     # raise flags
@@ -240,24 +216,21 @@ def img_quality_control(Icemask, Cloudmask, minimum_useable_area):
         QCflag = False
         print("*** SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS ***\n")
 
-    return QCflag, CloudCover, IceCover, NaNcover, useable_area
+
+    return QCflag, useable_area
+
 
 
 def load_model_and_images(img_path, pickle_path, Icemask, Cloudmask):
 
     """
     function loads classifier from file and loads S2 bands into xarray dataset and saves to NetCDF
-
     :param img_path: path to S2 image files
     :param pickle_path: path to trained classifier
     :param Icemask: Boolean to mask out non-ice areas
     :param Cloudmask: Boolean to mask out cloudy pixels
-
     :return: clf: classifier loaded in from .pkl file;
-
     """
-    print("*** LOADING CLASSIFIER AND IMAGE DATA ***")
-
     # Sentinel 2 dataset
     # create xarray dataset with all bands loaded from jp2s. Values are reflectance.
     fileB2 = glob.glob(str(img_path + '*B02_20m.jp2'))
@@ -323,19 +296,14 @@ def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
     """
     function applies loaded classifier and a narrowband to broadband albedo conversion to multispectral S2 image saved as
     NetCDF, saving plot and summary data to output folder.
-
     :param clf: trained classifier loaded from file
     :param img_path: path to S2 images
     :param savepath: path to output folder
     :param tile: tile ID
     :param date: date of acquisition
     :param savefigs: Boolean to control whether figure is saved to file
-
     :return: None
-
     """
-
-    print("*** CLASSIFYING IMAGES ***")
 
     with xr.open_dataset(img_path + "S2vals.nc",chunks={'x':2000,'y':2000}) as S2vals:
         # Set index for reducing data
@@ -493,7 +461,6 @@ def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
         plt.savefig(str(savepath + "{}_{}_Classified_Albedo.png".format(tile,date)), dpi=300)
         plt.close()
 
-        print("*** FINISHED CLASSIFICATION ***")
     return
 
 
@@ -538,25 +505,17 @@ def concat_all_dates(savepath, tile):
     """
     Function concatenates xarrays from individual dates into one master dataset for each tile.
     The dimensions are: date, classID and metric
-
     The coordinates on each dimension are accessed by their index in the following lists:
-
     date [0: 1st date, 1: 2nd date, 2: 3rd date]
     classID [0: SN, 1: WAT , 2: CC, 3: CI, 4: LA, 5: HA]
     metric [0: count, 1: mean, 2: std, 3: min, 4: 25% , 5: 50% , 6: 75%, 7: max ]
-
     The order of the indexes is: concat_data[date, ID, metric]
-
     so to access the total number of pixels classed as snow on the first date:
     >> concat_dataset[0,0,0].values
-
     to access the mean albedo of cryoconite covered pixels on all dates:
     >> concat_dataset[:,2,1].values
-
     or alternatively use xr.sel() which allows indexing by label, e.g.:
-
     concat_dataset.sel(classID = 'HA', metric = 'mean', date = '20160623')
-
     :param masterDF:
     :return:
     """
@@ -567,20 +526,16 @@ def concat_all_dates(savepath, tile):
 
     xrlist = glob.glob(str(savepath + 'summary_data_' + '*.nc')) # find all summary datasets
 
-    if len(xrlist)>1:
-        for i in np.arange(0,len(xrlist),1):
-            ds = xr.open_dataarray(xrlist[i])
-            data.append(ds)
-            date = ds.date
-            dates.append(date)
+    for i in np.arange(0,len(xrlist),1):
+        ds = xr.open_dataarray(xrlist[i])
+        data.append(ds)
+        date = ds.date
+        dates.append(date)
 
-        concat_data = xr.concat(data, dim=pd.Index(dates, name='date'))
+    concat_data = xr.concat(data, dim=pd.Index(dates, name='date'))
 
-        savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
-        concat_data.to_netcdf(savefilename,'w')
-
-    else:
-        print("*** only one tile was processed, no concatenation possible ***")
+    savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
+    concat_data.to_netcdf(savefilename,'w')
 
     concat_data = None  #flush
 
@@ -593,10 +548,8 @@ def clear_img_directory(img_path):
     """
     Function deletes all files in the local image directory ready to download the next set. Outputs are all stored in
     separate output folder.
-
     :param img_path: path to working directory where img files etc are stored.
     :return: None
-
     """
     files = glob.glob(str(img_path+'*.jp2'))
 
@@ -604,6 +557,8 @@ def clear_img_directory(img_path):
         os.remove(f)
 
     return
+
+
 
 
 ###################################################################################
@@ -616,8 +571,8 @@ img_path = '/home/joe/Desktop/blobtest/'
 pickle_path = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl'
 Icemask_in = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif'
 Icemask_out = '/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/GIMP_MASK.nc'
-cloudProbThreshold = 20 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
-minimum_useable_area = 50 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
+cloudProbThreshold = 10 # % probability threshold for classifying an individual pixel and cloudy or not cloudy (>threshold = discard)
+minimum_useable_area = 30 # minimum proportion of total image comprising useable pixels. < threshold = image discarded
 
 # set up empty lists and dataframes to append to
 download_problem_list =[] # empty list to append details of skipped tiles due to missing info
@@ -636,7 +591,7 @@ tiles = ['22WEV']#['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB'
 
 # specify year and month - currently automatically includes all days in each month (i.e. days not user defined).
 years = [2016] # specify years
-months = [8] # specify months of the year
+months = [6,7,8] # specify months of the year
 
 # set up dates (this will create list of all days in year/month range specified above)
 for year in years:
@@ -650,8 +605,8 @@ for year in years:
         elif month in [2]:
             endDate = 28
 
-        days = np.arange(1,endDate+1,1)
-
+#        days = np.arange(1,endDate+1,1)
+        days = np.arange(3,6,1)
         for day in days:
             date = str(str(year)+str(month).zfill(2)+str(day).zfill(2))
             dates.append(date)
@@ -680,7 +635,7 @@ for tile in tiles:
 
     for date in dates:
 
-        print("\n*** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
+        print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
 
         # query blob for files in tile and date range
         filtered_bloblist, download_flag = download_imgs_by_date(tile = tile, date = date, img_path = img_path,
@@ -689,15 +644,17 @@ for tile in tiles:
         # check download and only proceed if correct no. of files and cloud layer present
         if download_flag == False:
 
+            print("\n*** No Download flag raised *** \n *** Checking cloud, ice and NaN cover ***")
+
             Icemask, Cloudmask = format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold)
 
-            QCflag, Cloudcover, Icecover, NaNcover, useable_area = img_quality_control(Icemask, Cloudmask, minimum_useable_area)
+            QCflag, useable_area = img_quality_control(Icemask, Cloudmask, minimum_useable_area)
 
 
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
             if QCflag == False:
 
-                print("*** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
+                print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
 
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
 
@@ -711,29 +668,30 @@ for tile in tiles:
 
                 except:
 
-                    print("\n*** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
+                    print("\n *** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
 
             else:
-                print("\n*** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(tile, date, np.round(useable_area,4)))
+                print("\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(tile, date, np.round(useable_area,4)))
 
                 QC_reject_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
 
         else:
 
-            print("\n*** Download Flag Raised ***\n*** Skipping tile {} on {} due to download flag ***".format(tile, date))
+            print("\n*** Download Flag Raised ***\n *** Skipping tile {} on {} due to download flag ***".format(tile, date))
 
             download_problem_list.append('{}_{}'.format(tile,date))
 
         clear_img_directory(img_path)
 
-    print("*** COLLATING INDIVIDUAL TILES INTO FINAL DATASET ***")
+    print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
     concat_dataset = concat_all_dates(savepath, tile)
 
     # save logs to csv files
-    print("*** SAVING QC LOGS TO TXT FILES ***")
-    print("*** aborted_downloads.txt, rejected_by_qc.txt and good_tiles.txt saved to output folder ")
-    np.savetxt(str(savepath+"/aborted_downloads_{}.csv".format(tile)), download_problem_list, delimiter=",", fmt='%s')
-    np.savetxt(str(savepath+"/rejected_by_qc_{}.csv".format(tile)), QC_reject_list, delimiter=",", fmt='%s')
-    np.savetxt(str(savepath+"/good_tiles_{}.csv".format(tile)), good_tile_list, delimiter=",", fmt='%s')
+    print("\n *** SAVING QC LOGS TO TXT FILES ***")
+    print("\n *** aborted_downloads.txt, rejected_by_qc.txt and good_tiles.txt saved to output folder ")
+    np.savetxt(str(savepath+"/aborted_downloads.csv"), download_problem_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath+"/rejected_by_qc.csv"), QC_reject_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath+"/good_tiles.csv"), good_tile_list, delimiter=",", fmt='%s')
 
-print("\n************************\n *** COMPLETED RUN  *** \n *********************")
+print("\n ************************\n *** COMPLETED RUN  *** \n *********************")
+
