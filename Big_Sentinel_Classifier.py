@@ -4,10 +4,19 @@ them using a random forest classifier trained on field spectroscopy data (see gi
 There is a sequence of quality control functions that determine whether the downloaded image is of sufficient quality to
 be used in the analysis or alternatively whether it should be discarded. Reasons for discarding include cloud cover, NaNs
 and insufficient ice relative to land or ocean in the image. The sensitivity to these factors is tuned by the user.
+
 Code runs in environment IceSurfClassifiers:
 conda create -n IceSurfClassifiers python=3.6 numpy matplotlib scikit-learn seaborn azure rasterio gdal pandas
 conda install -c conda-forge xarray georaster sklearn_xarray
+
 """
+
+
+# TODO: improve cloud masking algorithm - check the sentinel cloudless python package https://github.com/sentinel-hub/sentinel2-cloud-detector
+# TODO: consider creating new classifier and interpolating over bad pixels
+# TODO: consider infilling cloudy dates with pixelwiselinear fits from good days
+# TODO: consider data output formats and useful parameters to include
+# TODO: tidy up console logs and refine logs saved to file
 
 import numpy as np
 import pandas as pd
@@ -19,17 +28,15 @@ from osgeo import gdal, osr
 import georaster
 import os
 import glob
-from azure.storage.blob import BlockBlobService, PublicAccess
+from azure.storage.blob import BlockBlobService
 
 # matplotlib settings: use ggplot style and turn interactive mode off
 mpl.style.use('ggplot')
 plt.ioff()
 
-
 ######################################################################################
 ############################ DEFINE FUNCTIONS ########################################
 ######################################################################################
-
 
 def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_key):
 
@@ -74,14 +81,18 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
     # download the files in the filtered list
     for i in filtered_bloblist:
         print(i)
-        block_blob_service.get_blob_to_path(tile,
+        try:
+            block_blob_service.get_blob_to_path(tile,
                                          i, str(img_path+i[-38:-4]+'.jp2'))
+        except:
+            print("download failed {}".format(i))
+
         # index to -38 because this is the filename without paths to folders etc
 
     # Check downloaded files to make sure all bands plus the cloud mask are present in the wdir
     # Raises download flag (Boolean true) and reports to console if there is a problem
 
-    if len(glob.glob(str(img_path + '*_B*_20m.jp2'))) < 9 or len(glob.glob(str(img_path + '*CLD_20m.jp2'))) == 0:
+    if len(glob.glob(str(img_path + '*_B*_20m.jp2'))) < 9 or len(glob.glob(str(img_path + '*CLD*_20m.jp2'))) == 0:
         download_flag = True
 
         print("\n *** DOWNLOAD QC FLAG RAISED *** \n *** There may have been no overpass on this date, or there is a"
@@ -96,16 +107,18 @@ def download_imgs_by_date(tile, date, img_path, blob_account_name, blob_account_
     return filtered_bloblist, download_flag
 
 
-
 def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
 
-    """0
+    """
     Function to format the land/ice and cloud masks.
     First, the Greenland Ice Mapping Project (GIMP) mask is reprojected to match the coordinate system of the S2 files.
     The relevant tiles of the GIMP mask were stitched to create one continuous Boolean array in a separate script.
     The cloud mask is derived from the clpoud layer in the L2A product which is an array of probabilities (0 - 1) that
     each pixel is obscured by cloud. The variable cloudProbThreshold is a user defined value above which the pixel is
     given value 1, and below which it is given value 0, creating a Boolean cloud/not-cloud mask.
+    Note that from 2016 onwards, the file naming convention changed in the Sentinel archive, with the string "CLD_20m"
+    replaced by "CLDPRB_20m". Therefore an additional wildcard * was added to the search term *CLD*_20m.jp2.
+
     :param img_path: path to image to use as projection template
     :param Icemask_in: file path to mask file
     :param Icemask_out: file path to save reprojected mask
@@ -113,7 +126,7 @@ def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
     :return Icemask: Boolean to mask out pixels outside the ice sheet boundaries
     :return Cloudmask: Boolean to mask out pixels obscured by cloud
     """
-    cloudmaskpath_temp = glob.glob(str(img_path + '*CLD_20m.jp2')) # find cloud mask layer in filtered S2 image directory
+    cloudmaskpath_temp = glob.glob(str(img_path + '*CLD*_20m.jp2')) # find cloud mask layer in filtered S2 image directory
     cloudmaskpath = cloudmaskpath_temp[0]
 
     mask = gdal.Open(Icemask_in)
@@ -216,7 +229,6 @@ def img_quality_control(Icemask, Cloudmask, minimum_useable_area):
         QCflag = False
         print("*** SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS ***\n")
 
-
     return QCflag, useable_area
 
 
@@ -272,6 +284,7 @@ def load_model_and_images(img_path, pickle_path, Icemask, Cloudmask):
 
     S2vals.to_netcdf(img_path + "S2vals.nc", mode='w')
 
+    # flush disk
     S2vals = None
     daB2 = None
     daB3 = None
@@ -294,6 +307,7 @@ def load_model_and_images(img_path, pickle_path, Icemask, Cloudmask):
 def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
 
     """
+
     function applies loaded classifier and a narrowband to broadband albedo conversion to multispectral S2 image saved as
     NetCDF, saving plot and summary data to output folder.
     :param clf: trained classifier loaded from file
@@ -303,6 +317,7 @@ def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
     :param date: date of acquisition
     :param savefigs: Boolean to control whether figure is saved to file
     :return: None
+
     """
 
     with xr.open_dataset(img_path + "S2vals.nc",chunks={'x':2000,'y':2000}) as S2vals:
@@ -464,7 +479,7 @@ def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
     return
 
 
-def albedo_report(masterDF, tile, date, savepath, save_albedo_data=False):
+def albedo_report(masterDF, tile, date, savepath):
 
     with xr.open_dataset(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date),
                          chunks={'x': 2000, 'y': 2000}) as dataset:
@@ -532,12 +547,15 @@ def concat_all_dates(savepath, tile):
         date = ds.date
         dates.append(date)
 
-    concat_data = xr.concat(data, dim=pd.Index(dates, name='date'))
+        try:
+            concat_data = xr.concat(data, dim=pd.Index(dates, name='date'))
 
-    savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
-    concat_data.to_netcdf(savefilename,'w')
+            savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
+            concat_data.to_netcdf(savefilename,'w')
+            concat_data = None  # flush
 
-    concat_data = None  #flush
+        except:
+            print("could not concatenate output files - there is probably only one output file available")
 
     return
 
@@ -557,7 +575,6 @@ def clear_img_directory(img_path):
         os.remove(f)
 
     return
-
 
 
 
@@ -590,7 +607,7 @@ tiles = ['22WEV']#['22XDF', '21XWD', '21XWC', '22WEV', '22WEU', '22WEA', '22WEB'
          #'21XVD','22WES', '22VER', '22WET']
 
 # specify year and month - currently automatically includes all days in each month (i.e. days not user defined).
-years = [2016] # specify years
+years = [2016,2017,2018] # specify years
 months = [6,7,8] # specify months of the year
 
 # set up dates (this will create list of all days in year/month range specified above)
@@ -605,8 +622,8 @@ for year in years:
         elif month in [2]:
             endDate = 28
 
-#        days = np.arange(1,endDate+1,1)
-        days = np.arange(3,6,1)
+        days = np.arange(1,endDate+1,1)
+
         for day in days:
             date = str(str(year)+str(month).zfill(2)+str(day).zfill(2))
             dates.append(date)
@@ -634,7 +651,6 @@ for tile in tiles:
     savepath = dirName
 
     for date in dates:
-
         print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
 
         # query blob for files in tile and date range
@@ -647,38 +663,28 @@ for tile in tiles:
             print("\n*** No Download flag raised *** \n *** Checking cloud, ice and NaN cover ***")
 
             Icemask, Cloudmask = format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold)
-
             QCflag, useable_area = img_quality_control(Icemask, Cloudmask, minimum_useable_area)
-
 
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
             if QCflag == False:
 
                 print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
-
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
 
                 try: # use try/except so that any images that slips through QC and then fail do not break run
-
                     clf = load_model_and_images(img_path, pickle_path, Icemask, Cloudmask)
-
                     ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True)
-
-                    summaryDF, masterDF = albedo_report(masterDF, tile, date, savepath, save_albedo_data=False)
+                    summaryDF, masterDF = albedo_report(masterDF, tile, date, savepath)
 
                 except:
-
                     print("\n *** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
 
             else:
                 print("\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(tile, date, np.round(useable_area,4)))
-
                 QC_reject_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
 
         else:
-
             print("\n*** Download Flag Raised ***\n *** Skipping tile {} on {} due to download flag ***".format(tile, date))
-
             download_problem_list.append('{}_{}'.format(tile,date))
 
         clear_img_directory(img_path)
