@@ -31,8 +31,8 @@ import Big_Sentinel_Classifier as bsc
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
 
-azure_cred = configparser.ConfigParser()
-azure_cred.read_file(open(os.environ['AZURE_SECRET']))
+azure_access = configparser.ConfigParser()
+azure_access.read_file(open(os.environ['AZURE_SECRET']))
 
 os.environ['PROCESS_DIR']
 
