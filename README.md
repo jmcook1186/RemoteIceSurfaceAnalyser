@@ -22,3 +22,4 @@ Create a file to hold Azure secret information, e.g. `.azure_secret`, with forma
     user=
     key=
 
+Create your `PROCESS_DIR`, e.g. `/scratch/BigSurfClass/`.
