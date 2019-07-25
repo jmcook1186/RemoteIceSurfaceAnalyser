@@ -1,0 +1,14 @@
+[options]
+; each tile must be in DOUBLE quotation marks; separate entries by commas
+tiles=["22WEV"]
+years=[2016,2017,2018]
+months=[6,7,8]
+classifier=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl
+icemask=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif
+
+[thresholds]
+cloudProb=10
+minArea=30
+
+[netcdf]
+author='Joseph Cook, University of Sheffield'
