@@ -38,7 +38,7 @@ class AzureAccess:
 
 
 
-    def send_to_blob(blob_account_name, blob_account_key, tile, L1Cpath, check_blobs=False):
+    def send_to_blob(tile, L1Cpath, check_blobs=False):
 
         """
         Function uploads processed L2A products to blob storage. Check if container matching tile name already exists -if so
