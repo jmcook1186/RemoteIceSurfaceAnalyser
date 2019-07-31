@@ -73,7 +73,7 @@ for tile in tiles:
         print("\n CURRENT TILE_ID = ", tile)
 
         try:
-            L1Cfiles = sentinel2_tools.download_L1C(L1Cpath, tile, dates, 
+            L1Cfiles = sentinel2_tools.download_L1C(chub_api, L1Cpath, tile, dates, 
                 config.get('thresholds','cloudCoverThresh'))
             sentinel2_tools.process_L1C_to_L2A(L1Cpath, L1Cfiles, 
                 config.get('options','resolution'), unzip_files=True)

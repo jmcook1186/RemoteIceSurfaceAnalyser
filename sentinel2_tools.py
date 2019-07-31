@@ -4,7 +4,7 @@ Functions for local-system management of Sentinel-2 files.
 """
 
 
-def download_L1C(L1Cpath, tile, dates, cloudcoverthreshold):
+def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
     """
     This function uses the sentinelsat API to download L1C products for tiles defined by "tile" in the date range
     specified by "dates". Prints number of files and their names to console.
