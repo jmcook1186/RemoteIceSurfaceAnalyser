@@ -1,14 +1,24 @@
 [options]
-; each tile must be in DOUBLE quotation marks; separate entries by commas
+; Tiles to process.
+; Each tile must be in DOUBLE quotation marks; separate entries by commas
 tiles=["22WEV"]
+; Years to process.
 years=[2016,2017,2018]
+; Months to process.
 months=[6,7,8]
+; Location of pkl file on machine which script is run on.
 classifier=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl
+; Location of icemask on machine which script is run on.
 icemask=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif
+; Sentinel-2 resolution at which to process to L2A.
+resolution=20
 
 [thresholds]
-cloudProb=10
-minArea=30
+; Minimum area required to be ice-covered, 0-100 (%).
+minArea=10
+; Cloud cover threshold, 0-100 (%).
+cloudCoverThresh=30
 
 [netcdf]
+; Sets the author attribute of the netcdf files.
 author='Joseph Cook, University of Sheffield'

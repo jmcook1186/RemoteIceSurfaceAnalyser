@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Usage:
-	run_classifier.py <template_file>
+	$ run_classifier.py <template_file.template>
 
 Returns: 
 	Nothing
@@ -23,18 +23,24 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import json
+import datetime as dt
+import calendar
 
-import sentinel_azure
+import sentinel2_tools
+import sentinel2_azure
 import Big_Sentinel_Classifier as bsc
 
-
+# Get project configuration
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
 
-azure_access = configparser.ConfigParser()
-azure_access.read_file(open(os.environ['AZURE_SECRET']))
 
-os.environ['PROCESS_DIR']
+# Open API to Azure blob store
+azure_cred = configparser.ConfigParser()
+azure_cred.read_file(open(os.environ['AZURE_SECRET']))
+azure = sentinel2_azure.AzureAccess(azure_cred.get('account','user'),
+                                    azure_cred.get('account','key'))
+
 
 # matplotlib settings: use ggplot style and turn interactive mode off
 mpl.style.use('ggplot')
@@ -66,25 +72,18 @@ months = json.loads(config.get('options','months'))
 for year in years:
     for month in months:
 
-        # adjust end date for number of days in month
-        if month in [1,3,5,7,8,10,12]:
-            endDate = 31
-        elif month in [4,6,9,11]:
-            endDate = 30
-        elif month in [2]:
-            endDate = 28
+        startDate = dt.date(year, month, 1)
+        endDate = dt.date(year, month, calendar.monthrange(year,month)[1])
+        dates_pd = pd.date_range(startDate, endDate, freq='1D')
 
-        days = np.arange(1,endDate+1,1)
-
-        for day in days:
-            date = str(str(year)+str(month).zfill(2)+str(day).zfill(2))
-            dates.append(date)
+        for date in dates_pd:
+            dates.append(date.strftime('%Y%m%d'))
 
 
 ###################################################################################
 ############### RUN FUNCTIONS & HEALTHCHECKS ######################################
 ###################################################################################
-print(config.get('options','tiles'))
+
 tiles = json.loads(config.get('options','tiles'))
 for tile in tiles:
 
@@ -106,11 +105,8 @@ for tile in tiles:
         print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
 
         # query blob for files in tile and date range
-        filtered_bloblist, download_flag = sentinel_azure.download_imgs_by_date(tile=tile, 
-        	date=date, 
-        	img_path=img_path,
-        	blob_account_name=azure_access.get('account','user'), 
-        	blob_account_key=azure_access.get('account','key'))
+        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile, 
+        	date, img_path)
 
         # check download and only proceed if correct no. of files and cloud layer present
         if download_flag:
@@ -120,13 +116,13 @@ for tile in tiles:
         else:
             print("\n*** No Download flag raised *** \n *** Checking cloud, ice and NaN cover ***")
 
-            Icemask, Cloudmask = bsc.format_mask(img_path, 
+            Icemask, Cloudmask = sentinel2_tools.format_mask(img_path, 
             	config.get('options','icemask'), 
             	os.environ['PROCESS_DIR'] + '/outputs/ICE_MASK.nc',
-            	config.get('thresholds','cloudProb'))
+            	config.get('thresholds','cloudCoverThresh'))
 
-            QCflag, useable_area = bsc.img_quality_control(Icemask, 
-            	Cloudmask, 
+            QCflag, useable_area = sentinel2_tools.img_quality_control(img_path,
+                Icemask, Cloudmask, 
             	config.get('thresholds','minArea'))
 
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
@@ -146,9 +142,7 @@ for tile in tiles:
                 except:
                     print("\n *** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
 
-        
-
-        bsc.clear_img_directory(img_path)
+        sentinel2_tools.clear_img_directory(img_path)
 
     print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
     concat_dataset = bsc.concat_all_dates(savepath, tile)

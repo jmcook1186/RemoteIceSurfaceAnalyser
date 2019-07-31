@@ -124,3 +124,147 @@ def remove_L1C(L1Cpath):
               'X'.center(80, 'X'))
 
     return
+
+
+
+def clear_img_directory(img_path):
+
+    """
+    Function deletes all files in the local image directory ready to download the next set. Outputs are all stored in
+    separate output folder.
+    :param img_path: path to working directory where img files etc are stored.
+    :return: None
+    """
+    files = glob.glob(str(img_path+'*.jp2'))
+
+    for f in files:
+        os.remove(f)
+
+    return
+
+
+
+def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
+
+    """
+    Function to format the land/ice and cloud masks.
+    First, the Greenland Ice Mapping Project (GIMP) mask is reprojected to match the coordinate system of the S2 files.
+    The relevant tiles of the GIMP mask were stitched to create one continuous Boolean array in a separate script.
+    The cloud mask is derived from the clpoud layer in the L2A product which is an array of probabilities (0 - 1) that
+    each pixel is obscured by cloud. The variable cloudProbThreshold is a user defined value above which the pixel is
+    given value 1, and below which it is given value 0, creating a Boolean cloud/not-cloud mask.
+    Note that from 2016 onwards, the file naming convention changed in the Sentinel archive, with the string "CLD_20m"
+    replaced by "CLDPRB_20m". Therefore an additional wildcard * was added to the search term *CLD*_20m.jp2.
+
+    :param img_path: path to image to use as projection template
+    :param Icemask_in: file path to mask file
+    :param Icemask_out: file path to save reprojected mask
+    :param cloudProbThreshold: threshold probability of cloud for masking pixel
+    :return Icemask: Boolean to mask out pixels outside the ice sheet boundaries
+    :return Cloudmask: Boolean to mask out pixels obscured by cloud
+    """
+    cloudmaskpath_temp = glob.glob(str(img_path + '*CLD*_20m.jp2')) # find cloud mask layer in filtered S2 image directory
+    cloudmaskpath = cloudmaskpath_temp[0]
+
+    mask = gdal.Open(Icemask_in)
+    mask_proj = mask.GetProjection()
+    mask_geotrans = mask.GetGeoTransform()
+    data_type = mask.GetRasterBand(1).DataType
+    n_bands = mask.RasterCount
+
+    S2filename = glob.glob(str(img_path + '*B02_20m.jp2')) # use glob to find files because this allows regex such as * - necessary for iterating through downloads
+    Sentinel = gdal.Open(S2filename[0]) # open the glob'd filed in gdal
+
+    Sentinel_proj = Sentinel.GetProjection()
+    Sentinel_geotrans = Sentinel.GetGeoTransform()
+    w = Sentinel.RasterXSize
+    h = Sentinel.RasterYSize
+
+    mask_filename = Icemask_out
+    new_mask = gdal.GetDriverByName('GTiff').Create(mask_filename,
+                                                     w, h, n_bands, data_type)
+    new_mask.SetGeoTransform(Sentinel_geotrans)
+    new_mask.SetProjection(Sentinel_proj)
+
+    gdal.ReprojectImage(mask, new_mask, mask_proj,
+                        Sentinel_proj, gdal.GRA_NearestNeighbour)
+
+    new_mask = None  # Flush disk
+
+    maskxr = xr.open_rasterio(Icemask_out)
+    mask_squeezed = xr.DataArray.squeeze(maskxr,'band')
+    Icemask = xr.DataArray(mask_squeezed.values)
+
+    # set up second mask for clouds
+    Cloudmask = xr.open_rasterio(cloudmaskpath)
+    Cloudmask = xr.DataArray.squeeze(Cloudmask,'band')
+    # set pixels where probability of cloud < threshold to 0
+    Cloudmask = Cloudmask.where(Cloudmask.values >= cloudProbThreshold, 0)
+    Cloudmask = Cloudmask.where(Cloudmask.values < cloudProbThreshold, 1)
+
+    return Icemask, Cloudmask
+
+
+
+def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
+
+    """
+    Function assesses image quality and raises flags if the image contains too little ice (i.e. mostly ocean, dry land
+    or NaNs) or too much cloud cover.
+
+    :param Icemask: Boolean for masking non-ice areas
+    :param Cloudmask: Boolean for masking out cloudy pixels
+    :param CloudCoverThreshold: threshold value for % of total pixels obscured by cloud. If over threshold image not used
+    :param IceCoverThreshold: threshold value for % of total pixels outside ice sheet boundaries. If over threshold image not used
+    :param NaNthreshold: threshold value for % of total pixels comprised by NaNs. If over threshold image not used
+    :return QCflag: quality control flag. Raised if cloud, non-ice or NaN pixels exceed threshold values.
+    :return CloudCover: % of total image covered by cloud
+    :return IceCover: % of total image covered by ice
+    :return NaNcover: % of total image comprising NaNs
+    """
+    print("*** CHECKING DATA QUALITY ***")
+
+    S2file = glob.glob(str(img_path + '*B02_20m.jp2')) # find band2 image (fairly arbitrary choice of band image)
+
+    with xr.open_rasterio(S2file[0]) as S2array: #open file
+
+        total_pixels = S2array.size
+        S2array = S2array.values # values to array
+        S2array[S2array > 0] = 1 # make binary (i.e all positive values become 1s)
+        S2array = np.squeeze(S2array) # reshape to match ice and cloudmasks (2d)
+        count_nans = total_pixels - np.count_nonzero(S2array)
+        percent_nans = (count_nans/total_pixels)*100
+        percent_non_nans = 100 - percent_nans
+
+        Icemask_inv = 1-Icemask
+        S2array_inv = 1-S2array
+
+        # create xarray dataset with ice mask, cloud mask and NaN mask.
+        qc_ds = xr.Dataset({'Cloudmask': (('y','x'), Cloudmask.values),'Icemask': (('y','x'), Icemask_inv),
+                            'NaNmask': (('y','x'), np.flip(S2array_inv,0))})
+
+        # good pixels are zeros in all three layers, so if the sum of the three layers is >0, that pixel is bad because of
+        # either NaN, non-ice or cloud
+        ds_sum = qc_ds.Cloudmask.values+qc_ds.Icemask.values+qc_ds.NaNmask.values
+        bad_pixels = np.count_nonzero(ds_sum)
+        good_pixels = total_pixels - bad_pixels
+        unuseable_area = (bad_pixels/total_pixels)*100
+        useable_area = (good_pixels/total_pixels)*100
+        print('good = {}%, bad = {}%'.format(useable_area,unuseable_area))
+
+    # report to console
+    print("{} % of the image is composed of useable pixels".format(np.round(useable_area,2)))
+    print("*** FINISHED QUALITY CONTROL ***")
+
+    # raise flags
+    if (useable_area < minimum_useable_area):
+
+        QCflag = True
+        print("*** THE NUMBER OF USEABLE PIXELS IS LESS THAN THE MINIMUM THRESHOLD: DISCARDING IMAGE *** \n")
+
+    else:
+
+        QCflag = False
+        print("*** SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS ***\n")
+
+    return QCflag, useable_area
