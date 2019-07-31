@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 The user defines a list of relevant tiles and dates. This script then accesses the SentinelHub store and downloads the
 relevant tiles as zipped L1C products and saves them locally. The local file is then converted to the L2A product using
@@ -14,6 +15,15 @@ tile
 |--date
     |--individual band jp2s
 
+
+Execution:
+
+Use of this driver script requires an IceSurfClassifiers template file.
+
+    $ download_process_s2.py <myjobfile.template>
+
+
+Andrew Tedstone, July 2019, based on original script by Joseph Cook
 
 """
 
