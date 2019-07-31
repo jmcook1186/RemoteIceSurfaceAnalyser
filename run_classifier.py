@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 """
+This script pulls images relating to specific Sentinel-2 tiles on specific dates
+ from Azure blob storage and classifies them using a random forest classifier 
+ trained on field spectroscopy data (see github.com/jmcook1186/IceSurfClassifiers).
+There is a sequence of quality control functions that determine whether the 
+downloaded image is of sufficient quality to be used in the analysis or 
+alternatively whether it should be discarded. Reasons for discarding include 
+cloud cover, NaNs and insufficient ice relative to land or ocean in the image. 
+The sensitivity to these factors is tuned by the user by setting up the template
+file.
+
 Usage:
 	$ run_classifier.py <template_file.template>
 
