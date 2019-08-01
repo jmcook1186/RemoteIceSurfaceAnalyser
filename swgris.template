@@ -3,7 +3,7 @@
 ; Each tile must be in DOUBLE quotation marks; separate entries by commas
 tiles=["22WEV"]
 ; Years to process.
-years=[2016,2017,2018]
+years=[2016]
 ; Months to process.
 months=[6,7,8]
 ; Location of pkl file on machine which script is run on.
@@ -21,4 +21,6 @@ cloudCoverThresh=30
 
 [netcdf]
 ; Sets the author attribute of the netcdf files.
-author='Joseph Cook, University of Sheffield'
+author=Joseph Cook, University of Sheffield
+title=Classified surface and albedo maps produced from Sentinel-2 imagery of the SW Greenland Ice Sheet
+predicted_legend="Snow:1; Water:2; Cryoconite:3; Clean Ice:4; Light Algae:5; Heavy Algae:6"
