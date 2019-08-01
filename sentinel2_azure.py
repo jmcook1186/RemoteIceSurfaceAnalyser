@@ -19,9 +19,9 @@ class AzureAccess:
 
 
 
-    self._acc_name = None
-    self._acc_key = None
-    self.block_blob_service = None
+    _acc_name = None
+    _acc_key = None
+    block_blob_service = None
 
 
 
