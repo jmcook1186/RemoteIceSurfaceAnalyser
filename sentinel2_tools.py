@@ -3,6 +3,12 @@ Functions for local-system management of Sentinel-2 files.
 
 """
 
+from collections import OrderedDict
+import os
+import glob
+import shutil
+import numpy as np
+
 
 def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
     """
@@ -38,7 +44,7 @@ def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
     print('\n',' DOWNLOADING {} FILES '.center(80, 'X').format(len(L1Cfiles)),'\n', 'X'.center(80, 'X'))
 
     # download all files
-    #api.download_all(products, directory_path = L1Cpath)
+    api.download_all(products, directory_path = L1Cpath)
 
 
     return L1Cfiles
@@ -101,7 +107,7 @@ def remove_L1C(L1Cpath):
     return
 
 
-    def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
+def remove_L2A(L1Cpath, upload_status): # delete unused L1C products
 
     """
     Once files have been sent to blob, remove them from local storage

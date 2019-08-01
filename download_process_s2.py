@@ -67,22 +67,23 @@ chub_api = SentinelAPI(cscihub_cred.get('account','user'),
 # Iterate through tiles
 for tile in tiles:
 
-    # Download and pre-process one month at a time
-    for month in months:
+    for year in years:
 
-        # set start and end dates
-        startDate = dt.date(year, month, 1)
-        endDate = dt.date(year, month, calendar.monthrange(year,month)[1])
+        # Download and pre-process one month at a time
+        for month in months:
 
-        # dates creates a tuple from the user-defined start and end dates
-        dates = (startDate, endDate)
+            # set start and end dates
+            startDate = dt.date(year, month, 1)
+            endDate = dt.date(year, month, calendar.monthrange(year,month)[1])
 
-        # set path to save downloads
-        L1Cpath = os.environ['PROCESS_DIR']
+            # dates creates a tuple from the user-defined start and end dates
+            dates = (startDate, endDate)
 
-        print("\n CURRENT TILE_ID = ", tile)
+            # set path to save downloads
+            L1Cpath = os.environ['PROCESS_DIR']
 
-        try:
+            print('\n TILE %s, %s-%s' %(tile, year, month))
+
             L1Cfiles = sentinel2_tools.download_L1C(chub_api, L1Cpath, tile, dates, 
                 config.get('thresholds','cloudCoverThresh'))
             sentinel2_tools.process_L1C_to_L2A(L1Cpath, L1Cfiles, 
@@ -91,12 +92,9 @@ for tile in tiles:
             upload_status = azure.send_to_blob(tile, L1Cpath, check_blobs=True)
             sentinel2_tools.remove_L2A(L1Cpath, upload_status)
 
-            print("\n TILE ID {} FINISHED".format(tile))
-            print('\n MOVING TO NEXT TILE '.center(80, 'X'), '\n', 'X'.center(80, 'X'))
-
-        # Should not catch all exceptions like this as this hides any genuine errors. Instead catch 
-        # specific errors only - not yet sure what these would be.
-        except: 
-            print("\n No images found for this tile on the specified dates")
+            # Should not catch all exceptions like this as this hides any genuine errors. Instead catch 
+            # specific errors only - not yet sure what these would be.
+            #except: 
+            #    print("\n No images found for this tile on the specified dates")
 
 print('X'.center(80,'X'), ' FINISHED ALL TILES '.center(80,'X'),'\n','X'.center(80,'X'))
