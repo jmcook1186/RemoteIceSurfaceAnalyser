@@ -461,17 +461,18 @@ def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
         cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
         cmap2.set_under(color='white')  # make sure background is white
 
-        fig, axes = plt.subplots(figsize=(10,8), ncols=1, nrows=2)
+        fig, axes = plt.subplots(figsize=(6,8), ncols=1, nrows=2)
         predictedxr.plot(ax=axes[0], cmap=cmap1, vmin=0, vmax=6)
-        plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
-        plt.title('Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
-        axes[0].grid(None)
+        axes[0].set_ylabel('Latitude (UTM Zone 22N)'), axes[0].set_xlabel('Longitude (UTM Zone 22N)')
+        axes[0].grid(False)
         axes[0].set_aspect('equal')
+        axes[0].tick_params(labelrotation=40)
 
         albedoxr.plot(ax=axes[1], cmap=cmap2, vmin=0, vmax=1)
-        plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+        axes[1].set_ylabel('Latitude (UTM Zone 22N)'), axes[1].set_xlabel('Longitude (UTM Zone 22N)')
         axes[1].set_aspect('equal')
-        axes[1].grid(None)
+        axes[1].grid(False)
+        axes[1].tick_params(labelrotation=40)
         fig.tight_layout()
         plt.savefig(str(savepath + "{}_{}_Classified_Albedo.png".format(tile,date)), dpi=300)
         plt.close()
@@ -575,7 +576,6 @@ def clear_img_directory(img_path):
         os.remove(f)
 
     return
-
 
 
 ###################################################################################
