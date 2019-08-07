@@ -451,30 +451,38 @@ def ClassifyImages(clf, img_path, savepath, tile, date, savefigs=True):
 
         dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile,date), mode='w')
 
-        dataset=None
+        dataset = None
 
     if savefigs:
-
+        # set colormap and background colours
         cmap1 = mpl.colors.ListedColormap(
-            ['purple', 'white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
+            ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
         cmap1.set_under(color='white')  # make sure background is white
         cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
         cmap2.set_under(color='white')  # make sure background is white
 
-        fig, axes = plt.subplots(figsize=(6,8), ncols=1, nrows=2)
-        predictedxr.plot(ax=axes[0], cmap=cmap1, vmin=0, vmax=6)
-        axes[0].set_ylabel('Latitude (UTM Zone 22N)'), axes[0].set_xlabel('Longitude (UTM Zone 22N)')
-        axes[0].grid(False)
-        axes[0].set_aspect('equal')
-        axes[0].tick_params(labelrotation=40)
+        # initialize figure object, add title and set class labels
+        fig = plt.figure(figsize=(6, 8))
+        plt.title("Classified ice surface and its albedos from UAV imagery: SW Greenland Ice Sheet", fontsize=28)
+        class_labels = ['Snow', 'Water', 'Cryoconite', 'Clean Ice', 'Light Algae', 'Heavy Algae']
 
-        albedoxr.plot(ax=axes[1], cmap=cmap2, vmin=0, vmax=1)
-        axes[1].set_ylabel('Latitude (UTM Zone 22N)'), axes[1].set_xlabel('Longitude (UTM Zone 22N)')
-        axes[1].set_aspect('equal')
-        axes[1].grid(False)
-        axes[1].tick_params(labelrotation=40)
-        fig.tight_layout()
-        plt.savefig(str(savepath + "{}_{}_Classified_Albedo.png".format(tile,date)), dpi=300)
+        # first subplot = classified map
+        ax1 = plt.subplot(211)
+        img = predictedxr.plot(cmap=cmap1, add_colorbar=False)
+        cbar = fig.colorbar(mappable=img, ax=ax1)
+
+        # workaround to get colorbar labels centrally positioned
+        tick_locs = np.arange(1, len(class_labels), 0.92)
+        cbar.set_ticks(tick_locs)
+        cbar.ax.set_yticklabels(class_labels, rotation=45, va='center')
+        plt.title('Classified Surface Map (UTM coordinates)'), ax1.set_aspect('equal')
+
+        # second subplot = albedo map
+        ax2 = plt.subplot(212)
+        albedoxr.plot(cmap=cmap2, vmin=0, vmax=1, ax=ax2), plt.title('Albedo Map (UTM coordinates)')
+        ax2.set_aspect('equal')
+
+        plt.savefig(str(savepath + "{}_{}_Classified_Albedo_Map.png".format(tile, date)), dpi=300)
         plt.close()
 
     return
