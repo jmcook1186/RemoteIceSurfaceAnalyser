@@ -12,6 +12,8 @@ classifier=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classi
 icemask=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif
 ; Sentinel-2 resolution at which to process to L2A.
 resolution=20
+; Create and save figures?
+savefigs=True
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).
