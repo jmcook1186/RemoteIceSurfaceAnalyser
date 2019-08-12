@@ -46,7 +46,7 @@ def add_grid_mapping(gm,ds):
 
 def create_latlon_da(geotiff_fn, x_name, y_name, encoding='default'):
 
-	gtiff = georaster.SingleBandRaster(geotiff_fn, load_data=False)
+    gtiff = georaster.SingleBandRaster(geotiff_fn, load_data=False)
     lon, lat = gtiff.coordinates(latlon=True)
     gtiff = None
 
