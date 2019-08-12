@@ -8,6 +8,7 @@ import os
 import glob
 import shutil
 import numpy as np
+from osgeo import gdal
 
 
 def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
