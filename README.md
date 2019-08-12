@@ -37,7 +37,28 @@ And for Copernicus SciHub:
 
 Create your `PROCESS_DIR`, e.g. `/scratch/BigSurfClass/`.
 
-You may want to set these environment variables in a shell file which you then `source` to execute whenever it is necessary. An example is provided in this repository.
+You may want to set these environment variables in a shell file which you then `source` to execute whenever it is necessary. An example is provided in this repository (`setup_classifier.sh`).
+
+
+## Use
+
+There are two main steps: (1) pre-processing Sentinel-2 imagery, and (2) running the classification and albedo algorithms. Driver scripts are provided in this repository to accomplish these steps.
+
+Before you begin, make sure you have created a `template` file containing the settings for your desired workflow, and that you have set the environment variables needed by the workflow (see 'Setup' above).
+
+If you have created the suggestion bash script, then simply run:
+
+    source setup_classifier.sh
+
+
+### Pre-processing
+
+Run `python download_process_s2.py <template.template>`.
+
+
+### Classification
+
+Run `python run_classifier.py <template.template>`.
 
 
 ## Contributions
