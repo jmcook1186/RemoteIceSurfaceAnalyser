@@ -38,7 +38,7 @@ class AzureAccess:
 
 
 
-    def send_to_blob(tile, L1Cpath, check_blobs=False):
+    def send_to_blob(self, tile, L1Cpath, check_blobs=False):
 
         """
         Function uploads processed L2A products to blob storage. Check if container matching tile name already exists -if so
@@ -154,7 +154,7 @@ class AzureAccess:
 
 
 
-    def download_imgs_by_date(tile, date, img_path):
+    def download_imgs_by_date(self, tile, date, img_path):
 
         """
         This function downloads subsets of images stored remotely in Azure blobs. The blob name is identical to the
