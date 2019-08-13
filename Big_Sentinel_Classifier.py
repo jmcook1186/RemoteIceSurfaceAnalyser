@@ -177,21 +177,31 @@ class SurfaceClassifier:
         with xr.open_dataset(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date),
                              chunks={'x': 2000, 'y': 2000}) as dataset:
 
+
             predicted = np.array(dataset.classified.values).ravel()
             albedo = np.array(dataset.albedo.values).ravel()
 
-            albedoDF = pd.DataFrame()
-            albedoDF['pred'] = predicted
-            albedoDF['albedo'] = albedo
-            albedoDF['tile'] = tile
-            albedoDF['date'] = date
+            predicted = dataset.classified.to_series()
+            albedo = dataset.albedo.to_series()
+            albedoDF = pd.DataFrame({'predicted':predicted, 'albedo':albedo})
+            
+            countDF = albedoDF.groupby(['predicted']).count()
+            summaryDF = albedoDF.groupby(['predicted']).describe()['albedo']
 
-            countDF = albedoDF.groupby(['pred']).count()
-            summaryDF = albedoDF.groupby(['pred']).describe()['albedo']
+            # Check for surface classes not found in image and add them into
+            # the results summary.
+            to_concat = {}
+            for n in np.arange(0,7):
+                try:
+                    v = summaryDF.loc[n]
+                except KeyError:
+                    to_concat[n] = 0
+
+            newSummaryDF = pd.concat((summaryDF, pd.DataFrame.from_dict(to_concat, orient='index')),axis=0).squeeze()
 
             ####################################
 
-            summaryxr = xr.DataArray(summaryDF, dims=('classID', 'metric'),
+            summaryxr = xr.DataArray(newSummaryDF, dims=('classID', 'metric'),
                                      coords={'classID': ['SN', 'WAT', 'CC', 'CI', 'LA', 'HA'],
                                              'metric': ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max'],
                                              }, attrs={'date': date})
@@ -205,7 +215,7 @@ class SurfaceClassifier:
 
             masterDF = masterDF.append(albedoDF, ignore_index=True)
 
-        return summaryDF, masterDF
+        return summaryDF
 
 
 
