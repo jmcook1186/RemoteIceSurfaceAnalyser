@@ -7,9 +7,9 @@ years=[2016]
 ; Months to process.
 months=[6,7,8]
 ; Location of pkl file on machine which script is run on.
-classifier=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl
+classifier=Sentinel2_classifier.pkl
 ; Location of icemask on machine which script is run on.
-icemask=/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Mask/merged_mask.tif
+icemask=merged_mask.tif
 ; Sentinel-2 resolution at which to process to L2A.
 resolution=20
 ; Create and save figures?

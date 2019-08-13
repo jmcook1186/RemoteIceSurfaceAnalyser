@@ -23,6 +23,7 @@ from osgeo import gdal, osr
 import georaster
 import os
 import glob
+import sklearn_xarray
 
 class SurfaceClassifier:
 
@@ -32,6 +33,27 @@ class SurfaceClassifier:
 
     # Level 2A scaling factor
     l2a_scaling_factor = 10000
+
+    # Store for loaded classifier
+    classifier = None
+
+    # names of bands as used in classifier
+    NAME_bands = 'bands'
+    NAME_x = 'x'
+    NAME_y = 'y'
+
+
+
+    def __init__(self, pkl):
+        """ Initialise classifier. 
+
+        :param pkl: path of pickled classifier.
+        :type pkl: str
+
+        """
+        self.classifier = joblib.load(pkl)
+
+        return
 
 
 
@@ -48,35 +70,47 @@ class SurfaceClassifier:
         store = []
         for band in self.s2_bands_use:
             fn = glob.glob('%s*%s_%sm.jp2' %(img_path,band,resolution))
-            da_band = xr.open_rasterio(fn, chunks={'x': 2000, 'y': 2000})
+            
+            if len(fn) > 1:
+                raise ValueError
+            else:
+                fn = fn[0]
+            
+            da_band = xr.open_rasterio(fn, chunks={self.NAME_x: 2000, self.NAME_y: 2000})
+            crs = da_band.attrs['crs']
             # Apply scaling factor
-            da_band = da_band / l2a_scaling_factor
-            da_band['band'] = [band]
+            da_band = da_band / self.l2a_scaling_factor
+            da_band[self.NAME_bands] = band
             store.append(da_band)
         
         # Concatenate all bands into a single DataArray
-        da = xr.concat(store, dim='band')
+        da = xr.concat(store, dim=self.NAME_bands).squeeze()
+        #da[self.NAME_bands] = self.s2_bands_use
         # Rename band dimension for compliance with IceSurfClassifier
-        da = da.rename('band', 'b')
+        #da = da.rename({'band':'b'})
 
         # Create complete dataset
-        ds = xr.Dataset({ 'Data': (('b','y','x'), da),
-                          'Icemask': (('y', 'x'), Icemask),
-                          'Cloudmask': (('x', 'y'), Cloudmask) })
+        ds = xr.Dataset({ 'Data': ((self.NAME_bands,self.NAME_y,self.NAME_x), da),
+                          'Icemask': ((self.NAME_y,self.NAME_x), Icemask),
+                          'Cloudmask': ((self.NAME_y,self.NAME_x), Cloudmask) },
+                          coords={self.NAME_bands:self.s2_bands_use, 
+                                  self.NAME_y:da_band[self.NAME_y],
+                                  self.NAME_x:da_band[self.NAME_x]})
+
+        ds.Data.attrs['crs'] = crs
 
         return ds
 
 
 
 
-    def classify_image(self, pickle_path, S2vals, savepath, tile, date, 
+    def classify_image(self, S2vals, savepath, tile, date, 
         savefigs=True):
         """ Apply classifier to image.
 
         function applies pickled classifier to multispectral S2 image saved as
         NetCDF, saving plot and summary data to output folder.
 
-        :param pickle_path: path to trained classifier saved in a pickle file
         :param S2vals: dataset of Sentinel-2 L2A data, probably loaded by load_img_to_xr
         :param savepath: path to output folder
         :param tile: tile ID
@@ -85,11 +119,9 @@ class SurfaceClassifier:
         :return: None
 
         """
-        
-        clf = joblib.load(pickle_path)
 
         # stack the values into a 1D array
-        stacked = S2vals.Data.stack(allpoints=['y', 'x'])
+        stacked = S2vals.Data.stack(allpoints=[self.NAME_y,self.NAME_x])
 
         # Transpose and rename so that DataArray has exactly the same layout/labels as the training DataArray.
         # mask out nan areas not masked out by GIMP
@@ -98,7 +130,7 @@ class SurfaceClassifier:
 
         # NEED TO TAKE CARE HERE - DOES DATA DEFINITELY HAVE SAME BAND LABELLING AS TRAINING DATAARRAY?
         # apply classifier
-        predicted = clf.predict(stackedT)
+        predicted = self.classifier.predict(stackedT)
 
         # Unstack back to x,y grid
         predicted = predicted.unstack(dim='samples')
@@ -108,13 +140,19 @@ class SurfaceClassifier:
 
 
     def calculate_albedo(self, S2vals):
-        """ Calculate albedo using Liang et al (2002) equation """
+        """ Calculate albedo using Liang et al (2002) equation
+
+        For some reason B8A is being used in unforked version of repo, even
+        though Naegeli uses B08...
+
+        See also Naegeli et al 2017, Remote Sensing
+        """
         
-        albedo = (  0.356 * S2vals.Data.sel(b='B2')  \
-                  + 0.130 * S2vals.Data.sel(b='B4')   \
-                  + 0.373 * S2vals.Data.sel(b='B8')  \
-                  + 0.085 * S2vals.Data.sel(b='B8A') \
-                  + 0.072 * S2vals.Data.sel(b='B11') \
+        albedo = (  0.356 * S2vals.Data.loc[{self.NAME_bands:'B02'}] \
+                  + 0.130 * S2vals.Data.loc[{self.NAME_bands:'B04'}] \
+                  + 0.373 * S2vals.Data.loc[{self.NAME_bands:'B8A'}] \
+                  + 0.085 * S2vals.Data.loc[{self.NAME_bands:'B11'}] \
+                  + 0.072 * S2vals.Data.loc[{self.NAME_bands:'B12'}] \
                   - 0.0018 )
 
         return albedo
@@ -125,7 +163,7 @@ class SurfaceClassifier:
         """ Combine ice mask and cloud masks """
 
         mask2 = (S2vals.Icemask.values == 1)  \
-              & (S2vals.Data.sum(dim='b') > 0) \
+              & (S2vals.Data.sum(dim=self.NAME_bands) > 0) \
               & (S2vals.Cloudmask.values == 0)
 
         return mask2
@@ -133,6 +171,8 @@ class SurfaceClassifier:
 
 
     def albedo_report(self, masterDF, tile, date, savepath):
+
+        """ TO DO: Refactor to cope with different surface type labels """
 
         with xr.open_dataset(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date),
                              chunks={'x': 2000, 'y': 2000}) as dataset:

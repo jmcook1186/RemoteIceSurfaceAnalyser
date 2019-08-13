@@ -9,6 +9,7 @@ import glob
 import shutil
 import numpy as np
 from osgeo import gdal
+import xarray as xr
 
 
 def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):

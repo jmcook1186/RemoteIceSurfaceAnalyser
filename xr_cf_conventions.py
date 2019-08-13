@@ -15,6 +15,8 @@ Andrew Tedstone, July/August 2019
 
 import xarray as xr
 from osgeo import osr
+import numpy as np
+
 
 import georaster
 
@@ -44,13 +46,13 @@ def add_grid_mapping(gm,ds):
 
 
 
-def create_latlon_da(geotiff_fn, x_name, y_name, encoding='default'):
+def create_latlon_da(geotiff_fn, x_name, y_name, x_coords, y_coords, proj_info, encoding='default'):
 
     gtiff = georaster.SingleBandRaster(geotiff_fn, load_data=False)
     lon, lat = gtiff.coordinates(latlon=True)
     gtiff = None
 
-    coords_geo = {y_name: S2vals[y_name], x_name: S2vals[x_name]}
+    coords_geo = {y_name: y_coords, x_name: x_coords}
 
     if encoding == 'default':
         encoding = {'_FillValue': -9999., 
@@ -77,15 +79,15 @@ def add_geo_info(ds, x_name, y_name, author, title):
 
 	# add metadata for dataset
     ds.attrs['Conventions'] = 'CF-1.4'
-    ds.attrs['author'] = netcdf_metadata['author']
-    ds.attrs['title'] = netcdf_metadata['title']
+    ds.attrs['author'] = author
+    ds.attrs['title'] = title
 
     # Additional geo-referencing
     ds.attrs['nx'] = len(ds[x_name])
     ds.attrs['ny'] = len(ds[y_name])
     ds.attrs['xmin'] = float(ds[x_name].min())
     ds.attrs['ymax'] = float(ds[y_name].max())
-    ds.attrs['spacing'] = ds[x_name].isel() #needs work
+    ds.attrs['spacing'] = (ds[x_name][1] - ds[x_name][0]).values
 
     # NC conventions metadata for dimensions variables
     ds[x_name].attrs['units'] = 'meters' # this needs to be setable rather than hard-coded
