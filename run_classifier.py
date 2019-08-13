@@ -240,7 +240,7 @@ for tile in tiles:
                     plt.close()
 
 
-                summaryDF, masterDF = bsc.albedo_report(masterDF, tile, date, savepath)
+                summaryDF = bsc.albedo_report(tile, date, savepath)
 
                 # except:
                 #     print("\n *** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
