@@ -170,13 +170,18 @@ class SurfaceClassifier:
 
 
 
-    def albedo_report(self, masterDF, tile, date, savepath):
+    def albedo_report(self, tile, date, savepath):
+        """ Report albedo in each surface type. 
 
-        """ TO DO: Refactor to cope with different surface type labels """
+        TO DO: Refactor to cope with different surface type labels 
+
+        AJT removed masterDF save call 2019/08/13 as this would eat serious
+        amounts of RAM if left to progress on a large job.
+
+        """
 
         with xr.open_dataset(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date),
                              chunks={'x': 2000, 'y': 2000}) as dataset:
-
 
             predicted = np.array(dataset.classified.values).ravel()
             albedo = np.array(dataset.albedo.values).ravel()
@@ -187,17 +192,19 @@ class SurfaceClassifier:
             
             countDF = albedoDF.groupby(['predicted']).count()
             summaryDF = albedoDF.groupby(['predicted']).describe()['albedo']
+            summaryDF = summaryDF.squeeze()
 
             # Check for surface classes not found in image and add them into
             # the results summary.
             to_concat = {}
-            for n in np.arange(0,7):
+            for n in np.arange(1,7):
                 try:
                     v = summaryDF.loc[n]
                 except KeyError:
-                    to_concat[n] = 0
+                    to_concat[n] = dict(max=0)
 
-            newSummaryDF = pd.concat((summaryDF, pd.DataFrame.from_dict(to_concat, orient='index')),axis=0).squeeze()
+            newSummaryDF = pd.concat((summaryDF, pd.DataFrame.from_dict(to_concat, orient='index')),
+                axis=0, sort=False)
 
             ####################################
 
@@ -213,9 +220,7 @@ class SurfaceClassifier:
 
             #####################################
 
-            masterDF = masterDF.append(albedoDF, ignore_index=True)
-
-        return summaryDF
+        return newSummaryDF
 
 
 
