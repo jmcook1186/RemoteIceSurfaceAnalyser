@@ -38,8 +38,6 @@ import calendar
 import glob
 import xarray as xr
 
-sys.path.append("/home/at15963/scripts/IceSurfClassifiers") 
-
 import sentinel2_tools
 import sentinel2_azure
 import Big_Sentinel_Classifier
@@ -48,7 +46,6 @@ import xr_cf_conventions
 # Get project configuration
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
-
 
 # Open API to Azure blob store
 azure_cred = configparser.ConfigParser()
