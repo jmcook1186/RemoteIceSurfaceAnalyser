@@ -34,15 +34,10 @@ class SurfaceClassifier:
     # Level 2A scaling factor
     l2a_scaling_factor = 10000
 
-    # Store for loaded classifier
-    classifier = None
-
     # names of bands as used in classifier
     NAME_bands = 'bands'
     NAME_x = 'x'
     NAME_y = 'y'
-
-
 
     def __init__(self, pkl):
         """ Initialise classifier. 
@@ -110,15 +105,6 @@ class SurfaceClassifier:
 
         function applies pickled classifier to multispectral S2 image saved as
         NetCDF, saving plot and summary data to output folder.
-
-        :param S2vals: dataset of Sentinel-2 L2A data, probably loaded by load_img_to_xr
-        :param savepath: path to output folder
-        :param tile: tile ID
-        :param date: date of acquisition
-        :param savefigs: Boolean to control whether figure is saved to file
-        :return: None
-
-        """
 
         # stack the values into a 1D array
         stacked = S2vals.Data.stack(allpoints=[self.NAME_y,self.NAME_x])
