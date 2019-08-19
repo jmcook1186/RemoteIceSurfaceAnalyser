@@ -125,3 +125,8 @@ dmypy.json
 
 # IntelliJ IDEA
 .idea/
+Process_Dir/
+
+\.azure_secret
+
+\.cscihub_secret

@@ -5,7 +5,7 @@ tiles=["22WEV"]
 ; Years to process.
 years=[2016]
 ; Months to process.
-months=[6,7,8]
+months=[6]
 ; Location of pkl file on machine which script is run on.
 classifier=Sentinel2_classifier.pkl
 ; Location of icemask on machine which script is run on.

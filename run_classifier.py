@@ -38,8 +38,6 @@ import calendar
 import glob
 import xarray as xr
 
-sys.path.append("/home/at15963/scripts/IceSurfClassifiers") 
-
 import sentinel2_tools
 import sentinel2_azure
 import Big_Sentinel_Classifier
@@ -49,35 +47,29 @@ import xr_cf_conventions
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
 
-
 # Open API to Azure blob store
 azure_cred = configparser.ConfigParser()
 azure_cred.read_file(open(os.environ['AZURE_SECRET']))
-azure = sentinel2_azure.AzureAccess(azure_cred.get('account','user'),
-                                    azure_cred.get('account','key'))
-
+azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
+                                    azure_cred.get('account', 'key'))
 
 # Open classifier
 bsc = Big_Sentinel_Classifier.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
-
 
 # matplotlib settings: use ggplot style and turn interactive mode off
 mpl.style.use('ggplot')
 plt.ioff()
 
-
-
-
 ###################################################################################
 ######## DEFINE BLOB ACCESS, GLOBAL VARIABLES AND HARD-CODED PATHS TO FILES #######
 ###################################################################################
 
-img_path = os.environ['PROCESS_DIR'] 
+img_path = os.environ['PROCESS_DIR']
 
 # set up empty lists and dataframes to append to
-download_problem_list =[] # empty list to append details of skipped tiles due to missing info
-QC_reject_list = [] # empty list to append details of skipped tiles due to cloud cover
-good_tile_list = [] # empty list to append tiles used in analysis
+download_problem_list = []  # empty list to append details of skipped tiles due to missing info
+QC_reject_list = []  # empty list to append details of skipped tiles due to cloud cover
+good_tile_list = []  # empty list to append tiles used in analysis
 masterDF = pd.DataFrame()
 dates = []
 
@@ -85,30 +77,29 @@ dates = []
 ######################### SET TILE AND DATE RANGE #################################
 ###################################################################################
 
-years = json.loads(config.get('options','years'))
-months = json.loads(config.get('options','months'))
+years = json.loads(config.get('options', 'years'))
+months = json.loads(config.get('options', 'months'))
 # set up dates (this will create list of all days in year/month range specified above)
 for year in years:
     for month in months:
 
         startDate = dt.date(year, month, 1)
-        endDate = dt.date(year, month, calendar.monthrange(year,month)[1])
+        endDate = dt.date(year, month, calendar.monthrange(year, month)[1])
         dates_pd = pd.date_range(startDate, endDate, freq='1D')
 
         for date in dates_pd:
             dates.append(date.strftime('%Y%m%d'))
 
-
 ###################################################################################
 ############### RUN FUNCTIONS & HEALTHCHECKS ######################################
 ###################################################################################
 
-tiles = json.loads(config.get('options','tiles'))
+tiles = json.loads(config.get('options', 'tiles'))
 for tile in tiles:
 
-    tile = tile.lower() #azure blob store is case sensitive: force lower case
-    #first create directory to save outputs to
-    dirName = str(img_path+'/outputs/'+tile+"/")
+    tile = tile.lower()  # azure blob store is case sensitive: force lower case
+    # first create directory to save outputs to
+    dirName = str(img_path + '/outputs/' + tile + "/")
 
     # Create target Directory if it doesn't already exist
     if not os.path.exists(dirName):
@@ -124,41 +115,45 @@ for tile in tiles:
         print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
 
         # query blob for files in tile and date range
-        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile, 
-        	date, img_path)
+        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
+                                                                       date, img_path)
 
         # check download and only proceed if correct no. of files and cloud layer present
         if download_flag:
-            print("\n*** Download Flag Raised ***\n *** Skipping tile {} on {} due to download flag ***".format(tile, date))
-            download_problem_list.append('{}_{}'.format(tile,date))
+            print("\n*** Download Flag Raised ***\n *** Skipping tile {} on {} due to download flag ***".format(tile,
+                                                                                                                date))
+            download_problem_list.append('{}_{}'.format(tile, date))
 
         else:
             print("\n*** No Download flag raised *** \n *** Checking cloud, ice and NaN cover ***")
 
-            Icemask, Cloudmask = sentinel2_tools.format_mask(img_path, 
-            	os.environ['PROCESS_DIR'] + config.get('options','icemask'), 
-            	os.environ['PROCESS_DIR'] + '/outputs/ICE_MASK.nc',
-            	int(config.get('thresholds','cloudCoverThresh')))
+            Icemask, Cloudmask = sentinel2_tools.format_mask(img_path,
+                                                             os.environ['PROCESS_DIR'] + config.get('options',
+                                                                                                    'icemask'),
+                                                             os.environ['PROCESS_DIR'] + '/outputs/ICE_MASK.nc',
+                                                             int(config.get('thresholds', 'cloudCoverThresh')))
 
             QCflag, useable_area = sentinel2_tools.img_quality_control(img_path,
-                Icemask, Cloudmask, 
-            	int(config.get('thresholds','minArea')))
+                                                                       Icemask, Cloudmask,
+                                                                       int(config.get('thresholds', 'minArea')))
 
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
             if QCflag:
-                print("\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(tile, date, np.round(useable_area,4)))
-                QC_reject_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
+                print(
+                    "\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(
+                        tile, date, np.round(useable_area, 4)))
+                QC_reject_list.append('{}_{}_useable_area = {} '.format(tile, date, useable_area))
 
             else:
                 print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
-                good_tile_list.append('{}_{}_useable_area = {} '.format(tile,date,useable_area))
+                good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, useable_area))
 
-                #try: # use try/except so that any images that slips through QC and then fail do not break run
-                    
-                s2xr = bsc.load_img_to_xr(img_path, 
-                    int(config.get('options', 'resolution')),
-                    Icemask, 
-                    Cloudmask)
+                # try: # use try/except so that any images that slips through QC and then fail do not break run
+
+                s2xr = bsc.load_img_to_xr(img_path,
+                                          int(config.get('options', 'resolution')),
+                                          Icemask,
+                                          Cloudmask)
 
                 predicted = bsc.classify_image(s2xr, savepath, tile, date, savefigs=True)
                 albedo = bsc.calculate_albedo(s2xr)
@@ -175,8 +170,8 @@ for tile in tiles:
                 fileB2 = glob.glob(str(img_path + '*B02_20m.jp2'))
                 fileB2 = fileB2[0]
 
-                lon, lat = xr_cf_conventions.create_latlon_da(fileB2, 'x', 'y', 
-                    s2xr.x, s2xr.y, proj_info)
+                lon, lat = xr_cf_conventions.create_latlon_da(fileB2, 'x', 'y',
+                                                              s2xr.x, s2xr.y, proj_info)
 
                 # 3) add predicted map array and add metadata
                 predicted = predicted.fillna(0)
@@ -185,7 +180,7 @@ for tile in tiles:
                 predicted.name = 'Surface Class'
                 predicted.attrs['long_name'] = 'Surface classified using Random Forest'
                 predicted.attrs['units'] = 'None'
-                predicted.attrs['key'] = config.get('netcdf','predicted_legend')
+                predicted.attrs['key'] = config.get('netcdf', 'predicted_legend')
                 predicted.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                 # add albedo map array and add metadata
@@ -199,21 +194,21 @@ for tile in tiles:
                 # collate data arrays into a dataset
                 dataset = xr.Dataset({
                     'classified': (['x', 'y'], predicted),
-                    'albedo':(['x','y'],albedo),
+                    'albedo': (['x', 'y'], albedo),
                     'Icemask': (['x', 'y'], s2xr.Icemask),
-                    'Cloudmask':(['x','y'], s2xr.Cloudmask),
-                    'FinalMask':(['x','y'],mask2),
+                    'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
+                    'FinalMask': (['x', 'y'], mask2),
                     proj_info.attrs['grid_mapping_name']: proj_info,
                     'longitude': (['x', 'y'], lon),
                     'latitude': (['x', 'y'], lat)
-                    },
-                    coords={'x':s2xr.x, 'y':s2xr.y})
+                },
+                    coords={'x': s2xr.x, 'y': s2xr.y})
 
-                dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y', 
-                    config.get('netcdf','author'), 
-                    config.get('netcdf', 'title'))
+                dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y',
+                                                         config.get('netcdf', 'author'),
+                                                         config.get('netcdf', 'title'))
 
-                dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile,date), mode='w')
+                dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
 
                 dataset = None
 
@@ -224,21 +219,21 @@ for tile in tiles:
                     cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
                     cmap2.set_under(color='white')  # make sure background is white
 
-                    fig, axes = plt.subplots(figsize=(10,8), ncols=1, nrows=2)
+                    fig, axes = plt.subplots(figsize=(10, 8), ncols=1, nrows=2)
                     predicted.plot(ax=axes[0], cmap=cmap1, vmin=0, vmax=6)
-                    #plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
-                    plt.title('Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
+                    # plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+                    plt.title(
+                        'Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
                     axes[0].grid(None)
                     axes[0].set_aspect('equal')
 
                     albedo.plot(ax=axes[1], cmap=cmap2, vmin=0, vmax=1)
-                    #plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+                    # plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
                     axes[1].set_aspect('equal')
                     axes[1].grid(None)
                     fig.tight_layout()
-                    plt.savefig(str(savepath + "{}_{}_Classified_Albedo.png".format(tile,date)), dpi=300)
+                    plt.savefig(str(savepath + "{}_{}_Classified_Albedo.png".format(tile, date)), dpi=300)
                     plt.close()
-
 
                 summaryDF = bsc.albedo_report(tile, date, savepath)
 
@@ -253,8 +248,8 @@ for tile in tiles:
     # save logs to csv files
     print("\n *** SAVING QC LOGS TO TXT FILES ***")
     print("\n *** aborted_downloads.txt, rejected_by_qc.txt and good_tiles.txt saved to output folder ")
-    np.savetxt(str(savepath+"/aborted_downloads.csv"), download_problem_list, delimiter=",", fmt='%s')
-    np.savetxt(str(savepath+"/rejected_by_qc.csv"), QC_reject_list, delimiter=",", fmt='%s')
-    np.savetxt(str(savepath+"/good_tiles.csv"), good_tile_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath + "/aborted_downloads.csv"), download_problem_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath + "/rejected_by_qc.csv"), QC_reject_list, delimiter=",", fmt='%s')
+    np.savetxt(str(savepath + "/good_tiles.csv"), good_tile_list, delimiter=",", fmt='%s')
 
 print("\n ************************\n *** COMPLETED RUN  *** \n *********************")
