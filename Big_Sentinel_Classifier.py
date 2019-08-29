@@ -4,7 +4,6 @@ Functions for classifying Sentinel 2 images using a trained classification model
 """
 # TODO: improve cloud masking algorithm - check the sentinel cloudless python package https://github.com/sentinel-hub/sentinel2-cloud-detector
 # TODO: consider creating new classifier and interpolating over bad pixels
-# TODO: consider infilling cloudy dates with pixelwise linear fits from good days
 # TODO: consider data output formats and useful parameters to include - additional classes?
 # TODO: tidy up console logs and refine logs saved to file
 

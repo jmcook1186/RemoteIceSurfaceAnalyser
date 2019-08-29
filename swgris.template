@@ -17,9 +17,9 @@ savefigs=True
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).
-minArea=10
+minArea=40
 ; Cloud cover threshold, 0-100 (%).
-cloudCoverThresh=30
+cloudCoverThresh=25
 
 [netcdf]
 ; Sets the author attribute of the netcdf files.

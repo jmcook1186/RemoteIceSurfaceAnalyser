@@ -25,18 +25,20 @@ AZURE_SECRET - path and filename of config file containing Azure secret informat
 
 """
 
+# TODO: make plotting consistent between "good" images and interpolated images in imageinterpolator() function
+
 import sys
 import os
 import configparser
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
 import json
 import datetime as dt
 import calendar
 import glob
 import xarray as xr
+import numpy as np
+import matplotlib.pyplot as plt
 
 import sentinel2_tools
 import sentinel2_azure
@@ -57,7 +59,7 @@ azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
 bsc = Big_Sentinel_Classifier.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
 
 # matplotlib settings: use ggplot style and turn interactive mode off
-mpl.style.use('ggplot')
+mpl.style.use('classic')
 plt.ioff()
 
 ###################################################################################
@@ -89,6 +91,8 @@ for year in years:
 
         for date in dates_pd:
             dates.append(date.strftime('%Y%m%d'))
+
+
 
 ###################################################################################
 ############### RUN FUNCTIONS & HEALTHCHECKS ######################################
@@ -237,10 +241,10 @@ for tile in tiles:
 
                 summaryDF = bsc.albedo_report(tile, date, savepath)
 
-                # except:
-                #     print("\n *** IMAGE ANALYSIS ATTEMPTED AND FAILED FOR {} {}: MOVING ON TO NEXT DATE \n".format(tile,date))
-
         sentinel2_tools.clear_img_directory(img_path)
+
+    print("*** INTERPOLATING MISSING TILES ***")
+    sentinel2_tools.imageinterpolator(years,months,tile)
 
     print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
     concat_dataset = bsc.concat_all_dates(savepath, tile)

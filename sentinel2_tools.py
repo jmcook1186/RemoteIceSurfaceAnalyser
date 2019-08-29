@@ -5,11 +5,15 @@ Functions for local-system management of Sentinel-2 files.
 
 from collections import OrderedDict
 import os
-import glob
 import shutil
-import numpy as np
 from osgeo import gdal
+import glob
 import xarray as xr
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime as dt
+import matplotlib as mpl
+plt.ioff()
 
 
 def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
@@ -276,3 +280,139 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
         print("*** SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS ***\n")
 
     return QCflag, useable_area
+
+
+def imageinterpolator(years, months, tile):
+
+    seasonStart = str(str(years[0]) + '_' + str(months[0]) + '_01')
+
+    if months[-1] == 6:
+        seasonEnd = str(str(years[-1]) + '_' + str(months[-1]) + '_30')
+    else:
+        seasonEnd = str(str(years[-1]) + '_' + str(months[-1]) + '_31')
+
+    # get list of "good" nc files and extract the dates as strings
+    DateList = glob.glob(str(os.environ['PROCESS_DIR'] + '/outputs/22wev/22wev_*.nc'))
+    fmt = '%Y_%m_%d'  # set format for date string
+    DOYlist = []  # empty list ready to receive days of year
+
+    # create list of all DOYs between start and end of season (1st June to 31st Aug as default)
+    DOYstart = dt.datetime.strptime(seasonStart, fmt).timetuple().tm_yday  # convert seasonStart to numeric DOY
+    DOYend = dt.datetime.strptime(seasonEnd, fmt).timetuple().tm_yday  # convert seasonEnd to numeric DOY
+    FullSeason = np.arange(DOYstart, DOYend, 1) # create list starting at DOY for seasonStart and ending at DOY for seasonEnd
+
+    # Now create list of DOYs and list of strings for all the dates in the image repo, i.e. dates with "good images"
+    # strip out the date from the filename and insert underscores to separate out YYYY, MM, DD so formats are consistent
+    for i in np.arange(0, len(DateList), 1):
+        DateList[i] = DateList[i][69:-33]
+        DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
+                                                                            6:8])  # format string to match format defined above
+        DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday)
+
+    # compare full season DOY list with DOY list in image repo to identify only the missing dates between seasonStart and seasonEnd
+    DOYlist = np.array(DOYlist)
+    MissingDates = np.setdiff1d(FullSeason,DOYlist)  # setdiff1d identifies the dates present in Fullseason but not DOYlist
+    year = seasonStart[0:4]  # the year is the first 4 characters in the string and is needed later
+
+    print("Generating synthetic images for the following 'missing' DOYs: ", MissingDates)
+
+    for Missing in MissingDates[1:]:
+        print("*** INSIDE MISSING DATE LOOP *** ", "MISSING DATE = {}".format(Missing))
+        # for each missing date find the nearest past and future "good" images in the repo
+        test = DOYlist - Missing  # subtract the missing DOY from each DOY in the image repo
+        closestPast = DOYlist[np.where(test < 0, test, -9999).argmax()]  # find the closest image from the past
+        closestFuture = DOYlist[np.where(test > 0, test, 9999).argmin()]  # find the closest image in the future
+        closestPastString = dt.datetime.strptime(str(year[2:4] + str(closestPast)),
+                                                 '%y%j').date().strftime('%Y%m%d')  # convert to string format
+        closestFutureString = dt.datetime.strptime(str(year[2:4] + str(closestFuture)),
+                                                   '%y%j').date().strftime('%Y%m%d')  # convert to string format
+        MissingDateString = dt.datetime.strptime(str(year[2:4] + str(Missing)),
+                                                 '%y%j').date().strftime('%Y%m%d')  # convert to string format
+        # report past, missing and future dates to console
+        print("closestPast = {}, MissingDate ={}, closestFuture = {}".format(closestPastString, MissingDateString,
+                                                                             closestFutureString))
+        if (closestPastString > seasonStart) and (closestFutureString < seasonEnd): # greater than == nearer to present, ensures interpolation does not try to go outside of available dates
+            print("skipping date (out of range)")
+        else:
+
+            # load past and future images that will be used for interpolation
+            imagePast = xr.open_dataset(str(
+                os.environ['PROCESS_DIR'] + '/outputs/22wev/22wev_' + closestPastString + '_Classification_and_Albedo_Data.nc'))
+            imageFuture = xr.open_dataset(str(
+                os.environ['PROCESS_DIR']+'/outputs/22wev/22wev_' + closestFutureString + '_Classification_and_Albedo_Data.nc'))
+
+            print("loaded images")
+
+            # extract the past and future albedo and classified layers.
+            albArrayPast = imagePast.albedo.values
+            albArrayFuture = imageFuture.albedo.values
+            classArrayPast = imagePast.classified.values
+            classArrayFuture = imageFuture.classified.values
+
+            print("albedo and classified layers extracted")
+
+            # linear regression pixelwise (2D array of slopes, 2D array of intercepts, independent variable = DOY, solve for pixel value)
+            slopes = (albArrayPast - albArrayFuture) / (closestFuture - closestPast)
+            intercepts = albArrayPast - (slopes * closestPast)
+            newAlbImage = slopes * Missing + intercepts
+
+            print("linear regression complete")
+
+            # take average albedo difference between each sequential pair of classes, if the albedo change between PAST and NEW exceeds
+            # that threshold then switch class
+            # 1. identify locations where class changes between past and future
+            albedoDiffs = albArrayPast - albArrayFuture
+            albedoDiffs = albedoDiffs*0.5
+            albedoDiffsPredicted = albArrayPast - newAlbImage
+            newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, classArrayFuture, classArrayPast)
+
+            # generate mask that eliminates pixels that are NaNs in EITHER past or future image
+            maskPast = np.isnan(albArrayPast)
+            maskFuture = np.isnan(albArrayFuture)
+            combinedMask = np.ma.mask_or(maskPast, maskFuture)
+
+            # apply mask to synthetic image
+            newAlbImage = np.ma.array(newAlbImage, mask=combinedMask)
+            newAlbImage = newAlbImage.filled(np.nan)
+            newAlbImage = abs(newAlbImage)
+            newAlbImage[newAlbImage < 0] = 0
+            newAlbImage[newAlbImage > 1] = 1
+
+            newClassImage = np.ma.array(newClassImage, mask=combinedMask)
+            newClassImage = newClassImage.filled(np.nan)
+
+            newXR = xr.Dataset({
+                'classified': (['x', 'y'], newClassImage),
+                'albedo': (['x', 'y'], newAlbImage),
+                'Icemask': (['x', 'y'], imagePast.Icemask),
+                'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                'FinalMask': (['x', 'y'], combinedMask),
+                'longitude': (['x', 'y'], imagePast.longitude),
+                'latitude': (['x', 'y'], imagePast.latitude)
+            }, coords = {'x': imagePast.x, 'y': imagePast.y})
+
+            newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
+
+            print("saving figures now!!!")
+
+            cmap1 = mpl.colors.ListedColormap(
+                ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
+            cmap1.set_under(color='white')  # make sure background is white
+            cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
+            cmap2.set_under(color='white')  # make sure background is white
+
+            plt.figure(1,figsize=(10,8))
+            plt.title(
+                'Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
+            plt.subplot(211)
+            plt.imshow(newXR.classified.values, vmin=1, vmax=6, cmap=cmap1),plt.colorbar()
+            plt.subplot(212)
+            plt.imshow(newXR.albedo.values, vmin=0,vmax=1, cmap=cmap2),plt.colorbar()
+
+            plt.tight_layout()
+            plt.savefig(str(os.environ['PROCESS_DIR'] + "/outputs/22wev/{}_{}_Classified_Albedo.png".format(tile, MissingDateString)), dpi=100)
+            plt.close()
+
+            newXR = None
+
+    return
