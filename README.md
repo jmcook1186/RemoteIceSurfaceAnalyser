@@ -17,16 +17,16 @@ or alternatively the environment can be built from environment.yaml using:
 
 In this case the environment name is set in the first line of the yml file. Beware of the prefix in the final line of the file - this will need to be updated or deleted depending on the installation.
 
-### Environment variables:
+### Environment variables
 
-the shell script setup_classifier.sh contains export commands that set the following environment variables:
+The classifier requires several environment variables to be set:
 
 * `AZURE_SECRET`: full path to file holding Azure secret information
 * `CSCIHUB_SECRET`: full path to file holding Copernicus SciHub secret information
 * `PROCESS_DIR`
-* `SEN2COR_BIN` : e.g. `/home/tothepoles/PycharmProjects/Sen2Cor-02.05.05-Linux64/bin/`
+* `SEN2COR_BIN` : e.g. `~/Sen2Cor-02.05.05-Linux64/bin/`
 
-The two "secret" variables are paths to files containing the account keys for the azure blob storage and Copernicus Sentinelsat APIs. The secret files should be included in the .gitignore file so that they are not added to the Git repository.
+The two "secret" variables are paths to files containing the account keys for the azure blob storage and Copernicus Sentinelsat APIs. These files can be located anywhere on your system and preferably outside the repository (although the `.gitignore` file is set to ignore `.secret` files to reduce the risk of these files being committed accidentally).
  
 Create a file to hold Azure secret information, e.g. `.azure_secret`, with format:
 
@@ -40,13 +40,15 @@ And for Copernicus SciHub:
     user=
     password=
 
-Create your `PROCESS_DIR`, e.g. `/scratch/BigSurfClass/`. The PROCESS_DIR is the folder where temporary files, images and eventually the output data will be stored. The pickled classifier and mask should also be saved to the PROCESS_DIR in advance of running the classifier script.
+Create your `PROCESS_DIR`, e.g. `/scratch/BigSurfClass/`. The `PROCESS_DIR` is the folder where temporary files, images and eventually the output data are stored. The pickled classifier and mask should also be saved to the `PROCESS_DIR` in advance of running the classifier script.
 
-To set these environment variables, open a terminal and use `source setup_classifier.sh` to execute whenever it is necessary.
+The simplest way to set these environment variables is to use a shell script. An example, `setup_classifier.sh`, has been provided with this repository. Make a copy that you can modify to suit your environment. The copy should not be committed back to this repository.
+
+With a shell script created to set these environment variables, execute `source setup_classifier.sh` in the terminal in which you plan to run the classifier. The variables will be available for the duration of the session. 
 
 ### Template
 
-The user-defined variable values are all defined in a template file (e.g. swgris.template). This is where the main script grabs values to configure the image downloading, processing, classification and reporting.
+The user-defined variable values are all defined in a template file (e.g.  `swgris.template`). This is where the main script grabs values to configure the image downloading, processing, classification and reporting.
 The user should enter their desired values into the template file prior to running the classifier. Multiple templates can be saved and called along with the classifier.
 
 ## Use
@@ -55,7 +57,7 @@ There are two main steps: (1) pre-processing Sentinel-2 imagery, and (2) running
 
 Before you begin, make sure you have created a `template` file containing the settings for your desired workflow, and that you have set the environment variables needed by the workflow (see 'Setup' above).
 
-If you have created the suggestion bash script, then simply run:
+If you have created the suggested bash shell script, then simply run:
 
     source setup_classifier.sh
 
