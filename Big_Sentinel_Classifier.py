@@ -2,31 +2,21 @@
 Functions for classifying Sentinel 2 images using a trained classification model
 
 """
-
-
 # TODO: improve cloud masking algorithm - check the sentinel cloudless python package https://github.com/sentinel-hub/sentinel2-cloud-detector
 # TODO: consider creating new classifier and interpolating over bad pixels
-# TODO: consider infilling cloudy dates with pixelwiselinear fits from good days
-# TODO: consider data output formats and useful parameters to include
+# TODO: consider data output formats and useful parameters to include - additional classes?
 # TODO: tidy up console logs and refine logs saved to file
 
 import numpy as np
 import pandas as pd
-import matplotlib as mpl
-import matplotlib.pyplot as plt
+import xarray as xr
+import glob
 try:
     import joblib
 except ImportError:
     from sklearn.externals import joblib
-import xarray as xr
-from osgeo import gdal, osr
-import georaster
-import os
-import glob
-import sklearn_xarray
 
 class SurfaceClassifier:
-
 
     # Bands to use in classifier
     s2_bands_use = ['B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B8A', 'B11', 'B12']
@@ -94,8 +84,6 @@ class SurfaceClassifier:
         return ds
 
 
-
-
     def classify_image(self, S2vals, savepath, tile, date, 
         savefigs=True):
         """ Apply classifier to image.
@@ -119,7 +107,6 @@ class SurfaceClassifier:
         predicted = predicted.unstack(dim='samples')
 
         return predicted
-
 
 
     def calculate_albedo(self, S2vals):
