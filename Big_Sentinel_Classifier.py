@@ -70,9 +70,6 @@ class SurfaceClassifier:
         
         # Concatenate all bands into a single DataArray
         da = xr.concat(store, dim=self.NAME_bands).squeeze()
-        #da[self.NAME_bands] = self.s2_bands_use
-        # Rename band dimension for compliance with IceSurfClassifier
-        #da = da.rename({'band':'b'})
 
         # Create complete dataset
         ds = xr.Dataset({ 'Data': ((self.NAME_bands,self.NAME_y,self.NAME_x), da),
@@ -103,7 +100,6 @@ class SurfaceClassifier:
         stackedT = stacked.T
         stackedT = stackedT.rename({'allpoints': 'samples'})
 
-        # NEED TO TAKE CARE HERE - DOES DATA DEFINITELY HAVE SAME BAND LABELLING AS TRAINING DATAARRAY?
         # apply classifier
         predicted = self.classifier.predict(stackedT)
 

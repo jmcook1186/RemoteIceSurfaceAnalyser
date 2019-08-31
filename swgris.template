@@ -5,10 +5,10 @@ tiles=["22WEV"]
 ; Years to process.
 years=[2016]
 ; Months to process.
-months=[6]
-; Location of pkl file on machine which script is run on.
+months=[6,7,8]
+; Name of pkl file (place the file in PROCESS_DIR).
 classifier=Sentinel2_classifier.pkl
-; Location of icemask on machine which script is run on.
+; Name of icemask file (place in PROCESS_DIR).
 icemask=merged_mask.tif
 ; Sentinel-2 resolution at which to process to L2A.
 resolution=20
