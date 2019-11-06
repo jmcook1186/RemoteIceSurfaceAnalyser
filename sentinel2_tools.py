@@ -283,31 +283,47 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
 
 
 def imageinterpolator(years, months, tile):
+    """
+    Function identifies the missing dates in our image repository - i.e those days where S2 images are not availabe due to
+    cloud cover, insufficient ice coverage, a download problem or simply lack of S2 overpass. For each missing date, this
+    function finds the closest previous and closest future images stored in the repository and applies a linear inteprolation
+    between the past and future valus for each pixel. This linear regression is then used to predict the pixel values for the
+    missing date. In this way, a synthetic image is created and added to the image repository to infill the missing dates
+    and provide a "complete" record.
 
+    param: years (as defined in template)
+    param: months (as defined in template)
+    param: tile (as defined in template)
+
+    returns: None, but saves new image (png) and dataset (.nc) to the output path
+
+    """
+    # define first and last date of entire season (i.e. 1st and last across all dates in model run)
     seasonStart = str(str(years[0]) + '_' + str(months[0]) + '_01')
 
+    # since it is JJA, only June has 30 days, July and August have 31
     if months[-1] == 6:
         seasonEnd = str(str(years[-1]) + '_' + str(months[-1]) + '_30')
     else:
         seasonEnd = str(str(years[-1]) + '_' + str(months[-1]) + '_31')
 
-    # get list of "good" nc files and extract the dates as strings
+    # get list of "good" nc files in process directory and extract the dates as strings
     DateList = glob.glob(str(os.environ['PROCESS_DIR'] + '/outputs/22wev/22wev_*.nc'))
     fmt = '%Y_%m_%d'  # set format for date string
     DOYlist = []  # empty list ready to receive days of year
 
-    # create list of all DOYs between start and end of season (1st June to 31st Aug as default)
+    # create list of all DOYs between start and end of season
     DOYstart = dt.datetime.strptime(seasonStart, fmt).timetuple().tm_yday  # convert seasonStart to numeric DOY
     DOYend = dt.datetime.strptime(seasonEnd, fmt).timetuple().tm_yday  # convert seasonEnd to numeric DOY
     FullSeason = np.arange(DOYstart, DOYend, 1) # create list starting at DOY for seasonStart and ending at DOY for seasonEnd
 
-    # Now create list of DOYs and list of strings for all the dates in the image repo, i.e. dates with "good images"
+    # Now create list of DOYs and list of strings for all the "good" dates in the image repo
     # strip out the date from the filename and insert underscores to separate out YYYY, MM, DD so formats are consistent
     for i in np.arange(0, len(DateList), 1):
         DateList[i] = DateList[i][69:-33]
         DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
                                                                             6:8])  # format string to match format defined above
-        DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday)
+        DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
 
     # compare full season DOY list with DOY list in image repo to identify only the missing dates between seasonStart and seasonEnd
     DOYlist = np.array(DOYlist)
@@ -316,8 +332,9 @@ def imageinterpolator(years, months, tile):
 
     print("Generating synthetic images for the following 'missing' DOYs: ", MissingDates)
 
-    for Missing in MissingDates[1:]:
-        print("*** INSIDE MISSING DATE LOOP *** ", "MISSING DATE = {}".format(Missing))
+    # set up loop to create a new "synthetic" image for each missing date
+    for Missing in MissingDates:
+        print(" Creating synthetic image for DOY {}".format(Missing))
         # for each missing date find the nearest past and future "good" images in the repo
         test = DOYlist - Missing  # subtract the missing DOY from each DOY in the image repo
         closestPast = DOYlist[np.where(test < 0, test, -9999).argmax()]  # find the closest image from the past
@@ -331,8 +348,10 @@ def imageinterpolator(years, months, tile):
         # report past, missing and future dates to console
         print("closestPast = {}, MissingDate ={}, closestFuture = {}".format(closestPastString, MissingDateString,
                                                                              closestFutureString))
-        if (closestPastString > seasonStart) and (closestFutureString < seasonEnd): # greater than == nearer to present, ensures interpolation does not try to go outside of available dates
+        if (closestPastString > seasonStart) and (closestFutureString < seasonEnd): # greater than == nearer to present,
+            # ensures interpolation does not try to go outside of available dates
             print("skipping date (out of range)")
+
         else:
 
             # load past and future images that will be used for interpolation
@@ -351,16 +370,18 @@ def imageinterpolator(years, months, tile):
 
             print("albedo and classified layers extracted")
 
-            # linear regression pixelwise (2D array of slopes, 2D array of intercepts, independent variable = DOY, solve for pixel value)
+            # update albedo
+            # linear regression pixelwise (2D array of slopes, 2D array of intercepts, independent variable = DOY,
+            # solve for pixel value)
             slopes = (albArrayPast - albArrayFuture) / (closestFuture - closestPast)
             intercepts = albArrayPast - (slopes * closestPast)
             newAlbImage = slopes * Missing + intercepts
 
             print("linear regression complete")
 
-            # take average albedo difference between each sequential pair of classes, if the albedo change between PAST and NEW exceeds
-            # that threshold then switch class
-            # 1. identify locations where class changes between past and future
+            # Update class
+            # take 0.5 * albedo difference between each sequential pair of classes, if the albedo change between PAST
+            # and NEW exceeds 0.5 * change from PAST to FUTURE then switch class from that of PAST to that of FUTURE.
             albedoDiffs = albArrayPast - albArrayFuture
             albedoDiffs = albedoDiffs*0.5
             albedoDiffsPredicted = albArrayPast - newAlbImage
@@ -371,7 +392,7 @@ def imageinterpolator(years, months, tile):
             maskFuture = np.isnan(albArrayFuture)
             combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
-            # apply mask to synthetic image
+            # apply mask to synthetic images
             newAlbImage = np.ma.array(newAlbImage, mask=combinedMask)
             newAlbImage = newAlbImage.filled(np.nan)
             newAlbImage = abs(newAlbImage)
@@ -381,6 +402,7 @@ def imageinterpolator(years, months, tile):
             newClassImage = np.ma.array(newClassImage, mask=combinedMask)
             newClassImage = newClassImage.filled(np.nan)
 
+            # collate data into xarray dataset and copy lat/lon etc from PAST
             newXR = xr.Dataset({
                 'classified': (['x', 'y'], newClassImage),
                 'albedo': (['x', 'y'], newAlbImage),
@@ -391,10 +413,10 @@ def imageinterpolator(years, months, tile):
                 'latitude': (['x', 'y'], imagePast.latitude)
             }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
+            # save synthetic image in same format in same directory as original "good" images
             newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
 
-            print("saving figures now!!!")
-
+            # generate figures
             cmap1 = mpl.colors.ListedColormap(
                 ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
             cmap1.set_under(color='white')  # make sure background is white
@@ -414,5 +436,4 @@ def imageinterpolator(years, months, tile):
             plt.close()
 
             newXR = None
-
     return

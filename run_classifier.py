@@ -153,8 +153,6 @@ for tile in tiles:
                 print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, useable_area))
 
-                # try: # use try/except so that any images that slips through QC and then fail do not break run
-
                 s2xr = bsc.load_img_to_xr(img_path,
                                           int(config.get('options', 'resolution')),
                                           Icemask,
@@ -162,7 +160,7 @@ for tile in tiles:
 
                 predicted = bsc.classify_image(s2xr, savepath, tile, date, savefigs=True)
                 albedo = bsc.calculate_albedo(s2xr)
-
+ 
                 ## Collate predicted map, albedo map and projection info into xarray dataset
                 mask2 = bsc.combine_masks(s2xr)
 
@@ -196,26 +194,94 @@ for tile in tiles:
                 albedo.attrs['units'] = 'dimensionless'
                 albedo.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
-                # collate data arrays into a dataset
-                dataset = xr.Dataset({
-                    'classified': (['x', 'y'], predicted),
-                    'albedo': (['x', 'y'], albedo),
-                    'Icemask': (['x', 'y'], s2xr.Icemask),
-                    'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
-                    'FinalMask': (['x', 'y'], mask2),
-                    proj_info.attrs['grid_mapping_name']: proj_info,
-                    'longitude': (['x', 'y'], lon),
-                    'latitude': (['x', 'y'], lat)
-                },
-                    coords={'x': s2xr.x, 'y': s2xr.y})
+                ## RUN SNICAR INVERSION
+                #######################
 
+                if config.get('options','retrieve_snicar_params'):
+
+                    print("*** NOW RUNNING SNICAR INVERSION FUNCTION ***")
+                    
+                    # run snicar inversion
+                    bsc.invert_snicar(s2xr, mask2)
+
+                    # Add metadata to retrieved snicar parameter arrays
+                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
+                        side_length.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        side_length.name = "Grain size"
+                        side_length.attrs['long_name'] = 'Grain size in microns. Assumed to be equal in length and depth, and homogenous to 10 cm depth'
+                        side_length.attrs['units'] = 'Microns'
+                        side_length.attrs['key'] = config.get('netcdf', 'side_length_legend')
+                        side_length.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+                    
+                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'density.nc')) as density:
+                        density.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        density.name = "Density"
+                        density.attrs['long_name'] = 'Ice column density in kg m-3. Assumed to be homogenous to 10 cm depth'
+                        density.attrs['units'] = 'Kg m-3'
+                        density.attrs['key'] = config.get('netcdf', 'density_legend')
+                        density.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+
+                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'dust.nc')) as dust:
+                        dust.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        dust.name = "Dust"
+                        dust.attrs['long_name'] = 'Dust mass mixing ratio in upper 1mm of ice column'
+                        dust.attrs['units'] = 'ng/g or ppb'
+                        dust.attrs['key'] = config.get('netcdf', 'dust_legend')
+                        dust.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+
+                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
+                        algae.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        algae.name = "Algae"
+                        algae.attrs['long_name'] = 'Ice column algae in kg m-3. Assumed to be homogenous to 10 cm depth'
+                        algae.attrs['units'] = 'Kg m-3'
+                        algae.attrs['key'] = config.get('netcdf', 'algae_legend')
+                        algae.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+
+
+                    # collate data arrays into a dataset
+                    dataset = xr.Dataset({
+                        'classified': (['x', 'y'], predicted),
+                        'albedo': (['x', 'y'], albedo),
+                        'grain_size': (['x','y'],side_length),
+                        'density':(['x','y'],density),
+                        'dust':(['x','y'],dust),
+                        'algae':(['x','y'],algae),
+                        'Icemask': (['x', 'y'], s2xr.Icemask),
+                        'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
+                        'FinalMask': (['x', 'y'], mask2),
+                        proj_info.attrs['grid_mapping_name']: proj_info,
+                        'longitude': (['x', 'y'], lon),
+                        'latitude': (['x', 'y'], lat)
+                    },
+                        coords={'x': s2xr.x, 'y': s2xr.y})
+
+                else:
+                    # if snicar retrieval is not selected in config/template file
+                    # collate data arrays into a dataset
+                    dataset = xr.Dataset({
+                        'classified': (['x', 'y'], predicted),
+                        'albedo': (['x', 'y'], albedo),
+                        'Icemask': (['x', 'y'], s2xr.Icemask),
+                        'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
+                        'FinalMask': (['x', 'y'], mask2),
+                        proj_info.attrs['grid_mapping_name']: proj_info,
+                        'longitude': (['x', 'y'], lon),
+                        'latitude': (['x', 'y'], lat)
+                    },
+                        coords={'x': s2xr.x, 'y': s2xr.y})
+
+                
+
+                # add geo info
                 dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y',
                                                          config.get('netcdf', 'author'),
                                                          config.get('netcdf', 'title'))
 
                 dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
 
+                # flush dataset from disk
                 dataset = None
+
 
                 if config.get('options', 'savefigs'):
                     cmap1 = mpl.colors.ListedColormap(
@@ -244,8 +310,9 @@ for tile in tiles:
 
         sentinel2_tools.clear_img_directory(img_path)
 
-    print("*** INTERPOLATING MISSING TILES ***")
-    sentinel2_tools.imageinterpolator(years,months,tile)
+    if config.get('options','interpolate_missing_tiles'):
+        print("*** INTERPOLATING MISSING TILES ***")
+        sentinel2_tools.imageinterpolator(years,months,tile)
 
     print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
     concat_dataset = bsc.concat_all_dates(savepath, tile)

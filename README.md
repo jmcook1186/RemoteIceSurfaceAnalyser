@@ -61,6 +61,12 @@ If you have created the suggested bash shell script, then simply run:
 
     source setup_classifier.sh
 
+### Snicar retrievals
+
+There is an option in the template file to retrieve snicar parameters. If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of
+snicar-generated spectra. The snicar parameters (grain size, density, dust concentration, algae concentration) used to generate the closest-matching spectra are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. 
+
+Note that despite the LUT approach, the snicar retrieval is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure D64_v3s Linux Data Science Machine with 64 cores to distribute the processing, which enables the retrieval function to complete in 53 minutes per tile. Testing on JC's laptop (i7-7700 GHz processor, 8 cores, 32GB RAM)took more than 10 hours to retrieve the snicar parameters for a single Sentinel-2 tile. Increasing the size of the LUT increases the computation time significantly. Currently the LUT comprises 2058 individual snicar runs, produced by running snicar with all possible combinations of 6 grain sizes, 7 densities, 7 dust concentrations and 7 algal concentrations. 
 
 ### Pre-processing
 

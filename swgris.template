@@ -5,7 +5,7 @@ tiles=["22WEV"]
 ; Years to process.
 years=[2016]
 ; Months to process.
-months=[6,7,8]
+months=[7]
 ; Name of pkl file (place the file in PROCESS_DIR).
 classifier=Sentinel2_classifier.pkl
 ; Name of icemask file (place in PROCESS_DIR).
@@ -13,16 +13,20 @@ icemask=merged_mask.tif
 ; Sentinel-2 resolution at which to process to L2A.
 resolution=20
 ; Create and save figures?
-savefigs=True
+savefigs=False
+; retrieve snicar params?
+retrieve_snicar_params=True
+; interpolate to infill missing tiles?
+interpolate_missing_tiles=True
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).
 minArea=40
 ; Cloud cover threshold, 0-100 (%).
-cloudCoverThresh=25
+cloudCoverThresh=20
 
 [netcdf]
 ; Sets the author attribute of the netcdf files.
 author=Joseph Cook, University of Sheffield
-title=Classified surface and albedo maps produced from Sentinel-2 imagery of the SW Greenland Ice Sheet
+title=Classified surface, LAP quantification, ice grain size/density and albedo maps produced from Sentinel-2 imagery of the SW Greenland Ice Sheet
 predicted_legend="Snow:1; Water:2; Cryoconite:3; Clean Ice:4; Light Algae:5; Heavy Algae:6"
