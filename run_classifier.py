@@ -25,7 +25,11 @@ AZURE_SECRET - path and filename of config file containing Azure secret informat
 
 """
 
-# TODO: make plotting consistent between "good" images and interpolated images in imageinterpolator() function
+# TODO: make plotting consistent between "good" images and interpolated images in sentinel2_tools.imageinterpolator() function
+# TODO: devise some automated protection against interpolating cloudy pixels in sentinel2_tools.imageinterpolator()
+# TODO: consider nearest-neighbour type spatial interpolation over cloudy pixels (could be part of previous todo)
+# TODO: interpolate algae, dust and grain size in sentinel2_tools.imageinterpolator()
+# TODO: create option for plotting algae, dust and grain size as well as albedo/class
 
 import sys
 import os
@@ -80,6 +84,7 @@ dates = []
 ######################### SET TILE AND DATE RANGE #################################
 ###################################################################################
 
+
 years = json.loads(config.get('options', 'years'))
 months = json.loads(config.get('options', 'months'))
 # set up dates (this will create list of all days in year/month range specified above)
@@ -94,7 +99,6 @@ for year in years:
             dates.append(date.strftime('%Y%m%d'))
 
 
-
 ###################################################################################
 ############### RUN FUNCTIONS & HEALTHCHECKS ######################################
 ###################################################################################
@@ -103,6 +107,7 @@ tiles = json.loads(config.get('options', 'tiles'))
 for tile in tiles:
 
     tile = tile.lower()  # azure blob store is case sensitive: force lower case
+    
     # first create directory to save outputs to
     dirName = str(img_path + '/outputs/' + tile + "/")
 
@@ -117,20 +122,22 @@ for tile in tiles:
     savepath = dirName
 
     for date in dates:
-        print("\n *** DOWNLOADING FILES FOR TILE: {} DATE: {} ***\n".format(tile, date))
+        print(f"\n DOWNLOADING FILES: {tile} {date}\n")
 
         # query blob for files in tile and date range
         filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
                                                                        date, img_path)
 
         # check download and only proceed if correct no. of files and cloud layer present
+
         if download_flag:
-            print("\n*** Download Flag Raised ***\n *** Skipping tile {} on {} due to download flag ***".format(tile,
-                                                                                                                date))
+            print(f"\nDOWNLOAD FLAG : Skipping {tile}, {date} ")
             download_problem_list.append('{}_{}'.format(tile, date))
 
+
+
         else:
-            print("\n*** No Download flag raised *** \n *** Checking cloud, ice and NaN cover ***")
+            print("\nChecking cloud, ice and NaN cover")
 
             Icemask, Cloudmask = sentinel2_tools.format_mask(img_path,
                                                              os.environ['PROCESS_DIR'] + config.get('options',
@@ -142,16 +149,18 @@ for tile in tiles:
                                                                        Icemask, Cloudmask,
                                                                        int(config.get('thresholds', 'minArea')))
 
+           
+            
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
             if QCflag:
-                print(
-                    "\n *** QC Flag Raised *** \n*** Skipping tile {} on {} due to QCflag: {} % useable pixels ***".format(
-                        tile, date, np.round(useable_area, 4)))
-                QC_reject_list.append('{}_{}_useable_area = {} '.format(tile, date, useable_area))
+                print(f"\n QC FlAG: Skipping {tile}, {date}: {np.round(useable_area,4)} % useable pixels")
+                QC_reject_list.append(f'{tile}_{date}_useable_area = {np.round(useable_area,2)}')
+
+
 
             else:
-                print("\n *** No cloud or ice cover flags: proceeding with image analysis for tile {}".format(tile))
-                good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, useable_area))
+                print(f"\n NO FLAGS, proceeding with image analysis for {tile}, {date}")
+                good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, np.round(useable_area,2)))
 
                 s2xr = bsc.load_img_to_xr(img_path,
                                           int(config.get('options', 'resolution')),
@@ -197,9 +206,9 @@ for tile in tiles:
                 ## RUN SNICAR INVERSION
                 #######################
 
-                if config.get('options','retrieve_snicar_params'):
+                if config.get('options','retrieve_snicar_params')=='True':
 
-                    print("*** NOW RUNNING SNICAR INVERSION FUNCTION ***")
+                    print("\n NOW RUNNING SNICAR INVERSION FUNCTION \n")
                     
                     # run snicar inversion
                     bsc.invert_snicar(s2xr, mask2)
@@ -208,9 +217,8 @@ for tile in tiles:
                     with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
                         side_length.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         side_length.name = "Grain size"
-                        side_length.attrs['long_name'] = 'Grain size in microns. Assumed to be equal in length and depth, and homogenous to 10 cm depth'
+                        side_length.attrs['long_name'] = 'Grain size in microns. Assumed homogenous to 10 cm depth'
                         side_length.attrs['units'] = 'Microns'
-                        side_length.attrs['key'] = config.get('netcdf', 'side_length_legend')
                         side_length.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
                     
                     with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'density.nc')) as density:
@@ -218,7 +226,6 @@ for tile in tiles:
                         density.name = "Density"
                         density.attrs['long_name'] = 'Ice column density in kg m-3. Assumed to be homogenous to 10 cm depth'
                         density.attrs['units'] = 'Kg m-3'
-                        density.attrs['key'] = config.get('netcdf', 'density_legend')
                         density.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                     with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'dust.nc')) as dust:
@@ -226,7 +233,6 @@ for tile in tiles:
                         dust.name = "Dust"
                         dust.attrs['long_name'] = 'Dust mass mixing ratio in upper 1mm of ice column'
                         dust.attrs['units'] = 'ng/g or ppb'
-                        dust.attrs['key'] = config.get('netcdf', 'dust_legend')
                         dust.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                     with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
@@ -234,7 +240,6 @@ for tile in tiles:
                         algae.name = "Algae"
                         algae.attrs['long_name'] = 'Ice column algae in kg m-3. Assumed to be homogenous to 10 cm depth'
                         algae.attrs['units'] = 'Kg m-3'
-                        algae.attrs['key'] = config.get('netcdf', 'algae_legend')
                         algae.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
 
@@ -270,8 +275,6 @@ for tile in tiles:
                     },
                         coords={'x': s2xr.x, 'y': s2xr.y})
 
-                
-
                 # add geo info
                 dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y',
                                                          config.get('netcdf', 'author'),
@@ -283,7 +286,10 @@ for tile in tiles:
                 dataset = None
 
 
-                if config.get('options', 'savefigs'):
+                # PLOTTING (if toggled)
+
+                if config.get('options', 'savefigs')=='True':
+                    
                     cmap1 = mpl.colors.ListedColormap(
                         ['purple', 'white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
                     cmap1.set_under(color='white')  # make sure background is white
@@ -306,22 +312,25 @@ for tile in tiles:
                     plt.savefig(str(savepath + "{}_{}_Classified_Albedo.png".format(tile, date)), dpi=300)
                     plt.close()
 
+                # generate summary data
                 summaryDF = bsc.albedo_report(tile, date, savepath)
-
+        
+        # clear process directory 
         sentinel2_tools.clear_img_directory(img_path)
 
-    if config.get('options','interpolate_missing_tiles'):
-        print("*** INTERPOLATING MISSING TILES ***")
+    # interpolate missing tiles if toggled ON
+    if config.get('options','interpolate_missing_tiles')=='True':
+        print("\nINTERPOLATING MISSING TILES")
         sentinel2_tools.imageinterpolator(years,months,tile)
 
-    print("\n *** COLLATING INDIVIDUAL TILES INTO FINAL DATASET***")
+    # collate individual dates into single dataset for each tile 
+    print("\nCOLLATING INDIVIDUAL TILES INTO FINAL DATASET")
     concat_dataset = bsc.concat_all_dates(savepath, tile)
 
     # save logs to csv files
-    print("\n *** SAVING QC LOGS TO TXT FILES ***")
-    print("\n *** aborted_downloads.txt, rejected_by_qc.txt and good_tiles.txt saved to output folder ")
+    print("\n SAVING QC LOGS TO TXT FILES")
     np.savetxt(str(savepath + "/aborted_downloads.csv"), download_problem_list, delimiter=",", fmt='%s')
     np.savetxt(str(savepath + "/rejected_by_qc.csv"), QC_reject_list, delimiter=",", fmt='%s')
     np.savetxt(str(savepath + "/good_tiles.csv"), good_tile_list, delimiter=",", fmt='%s')
 
-print("\n ************************\n *** COMPLETED RUN  *** \n *********************")
+print("\nCOMPLETED RUN")

@@ -5,25 +5,25 @@ tiles=["22WEV"]
 ; Years to process.
 years=[2016]
 ; Months to process.
-months=[7]
+months=[6]
 ; Name of pkl file (place the file in PROCESS_DIR).
 classifier=Sentinel2_classifier.pkl
 ; Name of icemask file (place in PROCESS_DIR).
 icemask=merged_mask.tif
 ; Sentinel-2 resolution at which to process to L2A.
 resolution=20
-; Create and save figures?
-savefigs=False
-; retrieve snicar params?
-retrieve_snicar_params=True
-; interpolate to infill missing tiles?
+; Create and save figures
+savefigs=True
+; retrieve snicar params
+retrieve_snicar_params=False
+; interpolate to infill missing tiles
 interpolate_missing_tiles=True
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).
 minArea=40
 ; Cloud cover threshold, 0-100 (%).
-cloudCoverThresh=20
+cloudCoverThresh=10
 
 [netcdf]
 ; Sets the author attribute of the netcdf files.

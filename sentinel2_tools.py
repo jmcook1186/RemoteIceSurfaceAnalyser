@@ -5,6 +5,7 @@ Functions for local-system management of Sentinel-2 files.
 
 from collections import OrderedDict
 import os
+import sys
 import shutil
 from osgeo import gdal
 import glob
@@ -13,7 +14,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
 import matplotlib as mpl
+import configparser
 plt.ioff()
+
+# Get project configuration
+config = configparser.ConfigParser()
+config.read_file(open(sys.argv[1]))
 
 
 def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
@@ -234,7 +240,8 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
     :return IceCover: % of total image covered by ice
     :return NaNcover: % of total image comprising NaNs
     """
-    print("*** CHECKING DATA QUALITY ***")
+    
+    print("CHECKING DATA QUALITY")
 
     S2file = glob.glob(str(img_path + '*B02_20m.jp2')) # find band2 image (fairly arbitrary choice of band image)
 
@@ -265,19 +272,19 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
         print('good = {}%, bad = {}%'.format(useable_area,unuseable_area))
 
     # report to console
-    print("{} % of the image is composed of useable pixels".format(np.round(useable_area,2)))
-    print("*** FINISHED QUALITY CONTROL ***")
+    print(f"{np.round(useable_area,2)} % of the image is composed of useable pixels")
+    print("FINISHED QC CHECKS")
 
     # raise flags
     if (useable_area < minimum_useable_area):
 
         QCflag = True
-        print("*** THE NUMBER OF USEABLE PIXELS IS LESS THAN THE MINIMUM THRESHOLD: DISCARDING IMAGE *** \n")
+        print("USEABLE PIXELS < MINIMUM THRESHOLD: DISCARDING IMAGE \n")
 
     else:
 
         QCflag = False
-        print("*** SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS ***\n")
+        print("SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS \n")
 
     return QCflag, useable_area
 
@@ -298,6 +305,7 @@ def imageinterpolator(years, months, tile):
     returns: None, but saves new image (png) and dataset (.nc) to the output path
 
     """
+
     # define first and last date of entire season (i.e. 1st and last across all dates in model run)
     seasonStart = str(str(years[0]) + '_' + str(months[0]) + '_01')
 
@@ -396,13 +404,13 @@ def imageinterpolator(years, months, tile):
             newAlbImage = np.ma.array(newAlbImage, mask=combinedMask)
             newAlbImage = newAlbImage.filled(np.nan)
             newAlbImage = abs(newAlbImage)
-            newAlbImage[newAlbImage < 0] = 0
-            newAlbImage[newAlbImage > 1] = 1
+            newAlbImage[newAlbImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+            newAlbImage[newAlbImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
 
             newClassImage = np.ma.array(newClassImage, mask=combinedMask)
             newClassImage = newClassImage.filled(np.nan)
 
-            # collate data into xarray dataset and copy lat/lon etc from PAST
+            # collate data into xarray dataset and copy metadata from PAST
             newXR = xr.Dataset({
                 'classified': (['x', 'y'], newClassImage),
                 'albedo': (['x', 'y'], newAlbImage),
@@ -416,24 +424,26 @@ def imageinterpolator(years, months, tile):
             # save synthetic image in same format in same directory as original "good" images
             newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
 
-            # generate figures
-            cmap1 = mpl.colors.ListedColormap(
-                ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
-            cmap1.set_under(color='white')  # make sure background is white
-            cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
-            cmap2.set_under(color='white')  # make sure background is white
+            if config.get('options','savefigs')=='True':
+                # generate figures
+                cmap1 = mpl.colors.ListedColormap(
+                    ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
+                cmap1.set_under(color='white')  # make sure background is white
+                cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
+                cmap2.set_under(color='white')  # make sure background is white
 
-            plt.figure(1,figsize=(10,8))
-            plt.title(
-                'Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
-            plt.subplot(211)
-            plt.imshow(newXR.classified.values, vmin=1, vmax=6, cmap=cmap1),plt.colorbar()
-            plt.subplot(212)
-            plt.imshow(newXR.albedo.values, vmin=0,vmax=1, cmap=cmap2),plt.colorbar()
+                plt.figure(1,figsize=(10,8))
+                plt.title(
+                    'Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
+                plt.subplot(211)
+                plt.imshow(newXR.classified.values, vmin=1, vmax=6, cmap=cmap1),plt.colorbar()
+                plt.subplot(212)
+                plt.imshow(newXR.albedo.values, vmin=0,vmax=1, cmap=cmap2),plt.colorbar()
 
-            plt.tight_layout()
-            plt.savefig(str(os.environ['PROCESS_DIR'] + "/outputs/22wev/{}_{}_Classified_Albedo.png".format(tile, MissingDateString)), dpi=100)
-            plt.close()
+                plt.tight_layout()
+                plt.savefig(str(os.environ['PROCESS_DIR'] + "/outputs/22wev/{}_{}_Classified_Albedo.png".format(tile, MissingDateString)), dpi=100)
+                plt.close()
 
             newXR = None
+
     return

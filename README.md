@@ -1,8 +1,10 @@
 # BigIceSurfClassifier
-this repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone over time.
-
+this repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on fiels spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as csv files for each tile/date.
 
 ## Setup
+
+### Hardware
+The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to maximise our use of xarray and dask to keep as much out of memory as possible. However, the invert_snicar() function is particularly demanding and can take up to a day to run on my 8 core i7-700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 64 core Azure Linux Data Science Machine, in which case one tile takes about 1 hour to complete.
 
 ### Environment
 The environment can be set up manually using the following commands:
@@ -61,6 +63,25 @@ If you have created the suggested bash shell script, then simply run:
 
     source setup_classifier.sh
 
+
+### Pre-processing
+
+Run `python download_process_s2.py <template.template>`.
+
+
+### Processing
+
+Run `python run_classifier.py <template.template>`.
+
+
+### Classification
+
+The classifier assigns one of 6 surface type labels to each pixel. This is achieved using a random forest classifier trained on field spectroscopy data and validated using multispectral imagery acquired from a UAV flown over the surface of the Greenland Ice Sheet in summer 2017 and 2018. 
+
+### Albedo
+
+Surface albedo is calculated using Liang et al's (2000) narrowband to broadband conversion which was originally formulated for LANDSAT but validated for Sentinel-2 by Naegeli et al. (2017).
+
 ### Snicar retrievals
 
 There is an option in the template file to retrieve snicar parameters. If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of
@@ -68,14 +89,11 @@ snicar-generated spectra. The snicar parameters (grain size, density, dust conce
 
 Note that despite the LUT approach, the snicar retrieval is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure D64_v3s Linux Data Science Machine with 64 cores to distribute the processing, which enables the retrieval function to complete in 53 minutes per tile. Testing on JC's laptop (i7-7700 GHz processor, 8 cores, 32GB RAM)took more than 10 hours to retrieve the snicar parameters for a single Sentinel-2 tile. Increasing the size of the LUT increases the computation time significantly. Currently the LUT comprises 2058 individual snicar runs, produced by running snicar with all possible combinations of 6 grain sizes, 7 densities, 7 dust concentrations and 7 algal concentrations. 
 
-### Pre-processing
+### Missing date interpolation
 
-Run `python download_process_s2.py <template.template>`.
+There is an option to toggle interpolation on/off. If interpolation is toggled on, the script will use pixel-wise linear interpolation to generate synthetic datasets for each missing date in the time series. Dates may be missing from the time series sue to a lack of overpass or a data quality issue such as excessive cloud cover. The interpolation function identifies these missing tiles, then identifies the most recent and nearest future dates where a valid dataset was acquired. It then applies a point-to-point linear regression between the values in each pixel in the past image and the corresponding pixel in the future image. The pixel values are then predicted using the regression equation for the missing dates. Recommend also scanning through the images manually after interpolation because occasionally interpolating pixels that were cloud-free in the past and cloudy in the future or vice versa can lead to unrealistic interpolation results. Anomalous dates should be manually discarded or alternatively the interpoaltion function could be run as a standalone with "good" past and future tiles manually selected.
 
-
-### Classification
-
-Run `python run_classifier.py <template.template>`.
+Only surface class and albedo are interpolated at present. May add functionality for interpolating RTM params soon.
 
 
 ## Contributions
