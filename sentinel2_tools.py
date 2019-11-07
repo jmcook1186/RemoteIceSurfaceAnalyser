@@ -58,9 +58,7 @@ def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
     # download all files
     api.download_all(products, directory_path = L1Cpath)
 
-
     return L1Cfiles
-
 
 
 def process_L1C_to_L2A(L1C_path, L1Cfiles, S2_resolution, unzip_files=True):
@@ -291,10 +289,10 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
 
 def imageinterpolator(years, months, tile):
     """
-    Function identifies the missing dates in our image repository - i.e those days where S2 images are not availabe due to
+    Function identifies the missing dates in the image repository - i.e those days where S2 images are not availabe due to
     cloud cover, insufficient ice coverage, a download problem or simply lack of S2 overpass. For each missing date, this
     function finds the closest previous and closest future images stored in the repository and applies a linear inteprolation
-    between the past and future valus for each pixel. This linear regression is then used to predict the pixel values for the
+    between the past and future values for each pixel. This linear regression is then used to predict the pixel values for the
     missing date. In this way, a synthetic image is created and added to the image repository to infill the missing dates
     and provide a "complete" record.
 
@@ -305,6 +303,8 @@ def imageinterpolator(years, months, tile):
     returns: None, but saves new image (png) and dataset (.nc) to the output path
 
     """
+
+    print("\nSTARTING INTERPOLATION FUNCTION\n")
 
     # define first and last date of entire season (i.e. 1st and last across all dates in model run)
     seasonStart = str(str(years[0]) + '_' + str(months[0]) + '_01')
@@ -338,27 +338,32 @@ def imageinterpolator(years, months, tile):
     MissingDates = np.setdiff1d(FullSeason,DOYlist)  # setdiff1d identifies the dates present in Fullseason but not DOYlist
     year = seasonStart[0:4]  # the year is the first 4 characters in the string and is needed later
 
-    print("Generating synthetic images for the following 'missing' DOYs: ", MissingDates)
+    print("\nMissing DOYs: ", MissingDates)
 
     # set up loop to create a new "synthetic" image for each missing date
+
     for Missing in MissingDates:
-        print(" Creating synthetic image for DOY {}".format(Missing))
+
+        print(f"\nGenerating data for DOY {Missing}")
         # for each missing date find the nearest past and future "good" images in the repo
         test = DOYlist - Missing  # subtract the missing DOY from each DOY in the image repo
         closestPast = DOYlist[np.where(test < 0, test, -9999).argmax()]  # find the closest image from the past
         closestFuture = DOYlist[np.where(test > 0, test, 9999).argmin()]  # find the closest image in the future
+
+
         closestPastString = dt.datetime.strptime(str(year[2:4] + str(closestPast)),
                                                  '%y%j').date().strftime('%Y%m%d')  # convert to string format
         closestFutureString = dt.datetime.strptime(str(year[2:4] + str(closestFuture)),
                                                    '%y%j').date().strftime('%Y%m%d')  # convert to string format
         MissingDateString = dt.datetime.strptime(str(year[2:4] + str(Missing)),
                                                  '%y%j').date().strftime('%Y%m%d')  # convert to string format
+        
         # report past, missing and future dates to console
-        print("closestPast = {}, MissingDate ={}, closestFuture = {}".format(closestPastString, MissingDateString,
-                                                                             closestFutureString))
+        print(f"closestPast = {closestPastString}, closestFuture = {closestFutureString}")
+        
         if (closestPastString > seasonStart) and (closestFutureString < seasonEnd): # greater than == nearer to present,
             # ensures interpolation does not try to go outside of available dates
-            print("skipping date (out of range)")
+            print(f"skipping date ({closestPastString} or {closestFutureString} out of range)")
 
         else:
 
@@ -368,63 +373,128 @@ def imageinterpolator(years, months, tile):
             imageFuture = xr.open_dataset(str(
                 os.environ['PROCESS_DIR']+'/outputs/22wev/22wev_' + closestFutureString + '_Classification_and_Albedo_Data.nc'))
 
-            print("loaded images")
+            # conditionally include or exclude grain size, density, dust and algae 
+            if config.get('options','retrieve_snicar_params')=='True':
 
-            # extract the past and future albedo and classified layers.
-            albArrayPast = imagePast.albedo.values
-            albArrayFuture = imageFuture.albedo.values
-            classArrayPast = imagePast.classified.values
-            classArrayFuture = imageFuture.classified.values
+                # extract the past and future albedo and classified layers.
+                albPast = imagePast.albedo.values
+                albFuture = imageFuture.albedo.values
+                classPast = imagePast.classified.values
+                classFuture = imageFuture.classified.values
+                grainPast = imagePast.grain_size.values
+                grainFuture = imagePast.grain_size.values
+                densityPast = imagePast.density.values
+                densityFuture = imagePast.density.values
+                dustPast = imagePast.dust.values
+                dustFuture = imagePast.dust.values
+                algaePast = imagePast.algae.values
+                algaeFuture = imagePast.algae.values
 
-            print("albedo and classified layers extracted")
+                # create mask
+                maskPast = np.isnan(albArrayPast)
+                maskFuture = np.isnan(albArrayFuture)
+                combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
-            # update albedo
-            # linear regression pixelwise (2D array of slopes, 2D array of intercepts, independent variable = DOY,
-            # solve for pixel value)
-            slopes = (albArrayPast - albArrayFuture) / (closestFuture - closestPast)
-            intercepts = albArrayPast - (slopes * closestPast)
-            newAlbImage = slopes * Missing + intercepts
+                filenames = ['albedo','class','grain', 'density', 'dust', 'algae']
+                counter = 0
+                # loop through params calculating linear regression
+                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(dustPast,dustFuture),(algaePast,algaeFuture)]:
+                    
+                    slopes = (i - j) / (closestFuture - closestPast)
+                    intercepts = i - (slopes * closestPast)
+                    newImage = slopes * Missing + intercepts
 
-            print("linear regression complete")
+                    # apply mask to synthetic images
+                    newImage = np.ma.array(newImage, mask=combinedMask)
+                    newImage = newImage.filled(np.nan)
+                    newImage = abs(newImage)
+                    newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+                    newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                    
+                    newImagexr = xr.DataArray(newImage)
+                    newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
+                    counter +=1
+                    newImage = None # flush disk
 
-            # Update class
-            # take 0.5 * albedo difference between each sequential pair of classes, if the albedo change between PAST
-            # and NEW exceeds 0.5 * change from PAST to FUTURE then switch class from that of PAST to that of FUTURE.
-            albedoDiffs = albArrayPast - albArrayFuture
-            albedoDiffs = albedoDiffs*0.5
-            albedoDiffsPredicted = albArrayPast - newAlbImage
-            newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, classArrayFuture, classArrayPast)
+                albedo = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
+                surfclass = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
+                grain = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc'))
+                density = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc'))
+                dust = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dust.nc'))
+                algae = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc'))
 
-            # generate mask that eliminates pixels that are NaNs in EITHER past or future image
-            maskPast = np.isnan(albArrayPast)
-            maskFuture = np.isnan(albArrayFuture)
-            combinedMask = np.ma.mask_or(maskPast, maskFuture)
+                # collate data into xarray dataset and copy metadata from PAST
+                newXR = xr.Dataset({
+                    'classified': (['x', 'y'], surfclass.values),
+                    'albedo': (['x', 'y'], albedo.values),
+                    'grain_size': (['x', 'y'], grain.values),
+                    'density': (['x', 'y'], density.values),
+                    'dust': (['x', 'y'], dust.values),
+                    'algae': (['x', 'y'], algae.values),
+                    'Icemask': (['x', 'y'], imagePast.Icemask),
+                    'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                    'FinalMask': (['x', 'y'], combinedMask),
+                    'longitude': (['x', 'y'], imagePast.longitude),
+                    'latitude': (['x', 'y'], imagePast.latitude)
+                }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
-            # apply mask to synthetic images
-            newAlbImage = np.ma.array(newAlbImage, mask=combinedMask)
-            newAlbImage = newAlbImage.filled(np.nan)
-            newAlbImage = abs(newAlbImage)
-            newAlbImage[newAlbImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
-            newAlbImage[newAlbImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
 
-            newClassImage = np.ma.array(newClassImage, mask=combinedMask)
-            newClassImage = newClassImage.filled(np.nan)
+            else: # if snicar retrieval toggled off
 
-            # collate data into xarray dataset and copy metadata from PAST
-            newXR = xr.Dataset({
-                'classified': (['x', 'y'], newClassImage),
-                'albedo': (['x', 'y'], newAlbImage),
-                'Icemask': (['x', 'y'], imagePast.Icemask),
-                'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                'FinalMask': (['x', 'y'], combinedMask),
-                'longitude': (['x', 'y'], imagePast.longitude),
-                'latitude': (['x', 'y'], imagePast.latitude)
-            }, coords = {'x': imagePast.x, 'y': imagePast.y})
+                # extract the past and future albedo and classified layers.
+                albPast = imagePast.albedo.values
+                albFuture = imageFuture.albedo.values
+                classPast = imagePast.classified.values
+                classFuture = imageFuture.classified.values
+
+                # create mask
+                maskPast = np.isnan(albArrayPast)
+                maskFuture = np.isnan(albArrayFuture)
+                combinedMask = np.ma.mask_or(maskPast, maskFuture)
+
+                filenames = ['albedo','class']
+                counter = 0
+
+                # loop through params calculating linear regression
+                for i,j in [(albPast,albFuture),(classPast,classFuture)]:
+                    
+                    slopes = (i - j) / (closestFuture - closestPast)
+                    intercepts = i - (slopes * closestPast)
+                    newImage = slopes * Missing + intercepts
+
+                    # apply mask to synthetic images
+                    newImage = np.ma.array(newImage, mask=combinedMask)
+                    newImage = newImage.filled(np.nan)
+                    newImage = abs(newImage)
+                    newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+                    newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                    
+                    newImagexr = xr.DataArray(newImage)
+                    newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
+                    counter +=1
+                    newImage = None # flush disk
+
+                albedo = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
+                surfclass = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
+
+                # collate data into xarray dataset and copy metadata from PAST
+                newXR = xr.Dataset({
+                    'classified': (['x', 'y'], surfclass.values),
+                    'albedo': (['x', 'y'], albedo.values),
+                    'Icemask': (['x', 'y'], imagePast.Icemask),
+                    'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                    'FinalMask': (['x', 'y'], combinedMask),
+                    'longitude': (['x', 'y'], imagePast.longitude),
+                    'latitude': (['x', 'y'], imagePast.latitude)
+                }, coords = {'x': imagePast.x, 'y': imagePast.y})
+
 
             # save synthetic image in same format in same directory as original "good" images
             newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
+            print("\nDataset saved")
 
             if config.get('options','savefigs')=='True':
+
                 # generate figures
                 cmap1 = mpl.colors.ListedColormap(
                     ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])

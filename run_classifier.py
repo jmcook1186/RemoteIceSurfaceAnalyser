@@ -28,7 +28,6 @@ AZURE_SECRET - path and filename of config file containing Azure secret informat
 # TODO: make plotting consistent between "good" images and interpolated images in sentinel2_tools.imageinterpolator() function
 # TODO: devise some automated protection against interpolating cloudy pixels in sentinel2_tools.imageinterpolator()
 # TODO: consider nearest-neighbour type spatial interpolation over cloudy pixels (could be part of previous todo)
-# TODO: interpolate algae, dust and grain size in sentinel2_tools.imageinterpolator()
 # TODO: create option for plotting algae, dust and grain size as well as albedo/class
 
 import sys
@@ -43,8 +42,6 @@ import glob
 import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
-
-
 import sentinel2_tools
 import sentinel2_azure
 import Big_Sentinel_Classifier
