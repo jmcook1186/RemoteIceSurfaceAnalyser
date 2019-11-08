@@ -2,10 +2,6 @@
 Functions for classifying Sentinel 2 images using a trained classification model
 
 """
-# TODO: improve cloud masking algorithm - check the sentinel cloudless python package https://github.com/sentinel-hub/sentinel2-cloud-detector
-# TODO: consider creating new classifier and interpolating over bad pixels
-# TODO: consider data output formats and useful parameters to include - additional classes?
-# TODO: tidy up console logs and refine logs saved to file
 
 import numpy as np
 import pandas as pd
@@ -139,13 +135,14 @@ class SurfaceClassifier:
         return mask2
 
 
-    def invert_snicar(self, S2vals, mask2):
+    def invert_snicar(self, S2vals):
 
         """
         Pixelwise retrieval of snicar RT params by matching spectra against snicar-generated LUT loaded from process_dir
 
         """
 
+        print("\nRETRIEVING SNICAR PARAMS")
         band_idx = pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9], name='bands')
 
         # concatenate the bands into a single dimension ('bands_idx') in the data array
@@ -173,12 +170,9 @@ class SurfaceClassifier:
         idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
 
         # RECHUNK STACKEDT: choice of chunk size is crucial for maximising speed while preventing memory over-allocation.
-        # While 20000 seems small there are very large intermediate arrays spawned by the compute() function.
-        # The compute() function takes almost a day to run on an 8 core i7-7000 GHz processor with 32GB RAM. 
-        # Takes 58 mins on 64 core Azure VM.
+        # While 10000 seems small there are very large intermediate arrays spawned by the compute() function.
 
         stackedT = stackedT.chunk(20000,9)
-
 
         # reformat LUT: flatten to 2D array with column per combination of RT params, row per wavelength
         dirtyLUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
@@ -207,43 +201,42 @@ class SurfaceClassifier:
         # only the first value from the parameeter arrays are taken.
 
         counter = 0
-        param_names = ['side_lengths','densities','dust','algae']
+        param_names = ['side_lengths','density','dust','algae']
         for param in [side_lengths, densities, dust, algae]:
             for i in np.arange(0,len(param),1):
+                
                 if i ==0:
                     result_array = np.where(param_array[counter]==i, param[i][0], param_array[counter])
                 else:
                     result_array = np.where(param_array[counter]==i, param[i][0], result_array)
 
-            result_array = result_array.reshape([int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT)))])
-            resultxr = xr.DataArray(result_array)
-            resultxr = resultxr.where(mask2>0)
-            result_array = None
+            result_array = result_array.reshape(int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT))))
+            
+            resultxr = xr.DataArray(result_array,dims=['x','y']).chunk(2000,2000)
             resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
-            resultxr = None
+
             counter +=1
 
+        # retrieved params are saved as temporary netcdfs to the process_dir and then loaded into the final dataset in run_classifier.py
+
         return
+
 
 
     def albedo_report(self, tile, date, savepath):
         """ Report albedo in each surface type. 
 
-        TO DO: Refactor to cope with different surface type labels 
-
-        AJT removed masterDF save call 2019/08/13 as this would eat serious
-        amounts of RAM if left to progress on a large job.
+        TODO: Refactor to cope with different surface type labels 
 
         """
 
-        with xr.open_dataset(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date),
+        with xr.open_dataset(savepath + f"{tile}_{date}_Classification_and_Albedo_Data.nc",
                              chunks={'x': 2000, 'y': 2000}) as dataset:
 
-            predicted = np.array(dataset.classified.values).ravel()
-            albedo = np.array(dataset.albedo.values).ravel()
 
             predicted = dataset.classified.to_series()
             albedo = dataset.albedo.to_series()
+
             albedoDF = pd.DataFrame({'predicted':predicted, 'albedo':albedo})
             
             countDF = albedoDF.groupby(['predicted']).count()
@@ -269,7 +262,7 @@ class SurfaceClassifier:
                                              'metric': ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max'],
                                              }, attrs={'date': date})
 
-            summaryxr.to_netcdf(str(savepath+'summary_data_{}_{}.nc'.format(tile, date)))
+            summaryxr.to_netcdf(str(savepath+f'summary_data_{tile}_{date}.nc'))
 
             algal_coverage = (sum(summaryxr.sel(classID=['HA', 'LA'], metric='count')) / (
                 sum(summaryxr.sel(classID=['HA','LA','WAT', 'CC', 'CI'], metric='count').values))) * 100
@@ -315,7 +308,7 @@ class SurfaceClassifier:
             try:
                 concat_data = xr.concat(data, dim=pd.Index(dates, name='date'))
 
-                savefilename = str(savepath+'summary_data_all_dates_{}.nc'.format(tile))
+                savefilename = str(savepath+f'summary_data_all_dates_{tile}.nc')
                 concat_data.to_netcdf(savefilename,'w')
                 concat_data = None  # flush
 
@@ -324,3 +317,46 @@ class SurfaceClassifier:
 
         return
 
+
+    def LAP_report(self, tile, date, savepath):
+        """  
+
+        Report summary stats for dus and algae 
+
+        """
+
+        with xr.open_dataset(savepath + f"{tile}_{date}_Classification_and_Albedo_Data.nc",
+                             chunks={'x': 2000, 'y': 2000}) as dataset:
+
+            algae = dataset.algae.to_series()
+            dust = dataset.dust.to_series()
+
+            LAP_DF = pd.DataFrame({'algae':algae, 'dust':dust})
+            
+            total_biomass = LAP_DF['algae'].sum()
+            total_dust = LAP_DF['dust'].sum()
+
+            max_biomass = LAP_DF['algae'].max()
+            max_dust = LAP_DF['dust'].max()
+
+            min_biomass = LAP_DF['algae'].min()
+            min_dust = LAP_DF['dust'].min()
+
+            LAP_DF = LAP_DF.squeeze()
+
+
+            ####################################
+
+            summaryxr = xr.DataArray(newSummaryDF, dims=('classID', 'metric'),
+                                     coords={'classID': ['SN', 'WAT', 'CC', 'CI', 'LA', 'HA'],
+                                             'metric': ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max'],
+                                             }, attrs={'date': date})
+
+            summaryxr.to_netcdf(str(savepath+f'summary_data_{tile}_{date}.nc'))
+
+            algal_coverage = (sum(summaryxr.sel(classID=['HA', 'LA'], metric='count')) / (
+                sum(summaryxr.sel(classID=['HA','LA','WAT', 'CC', 'CI'], metric='count').values))) * 100
+
+            #####################################
+
+        return newSummaryDF

@@ -32,6 +32,7 @@ def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
     :param dates:
 
     :return: L1Cfiles
+
     """
 
     # define keyword arguments
@@ -391,8 +392,8 @@ def imageinterpolator(years, months, tile):
                 algaeFuture = imagePast.algae.values
 
                 # create mask
-                maskPast = np.isnan(albArrayPast)
-                maskFuture = np.isnan(albArrayFuture)
+                maskPast = np.isnan(albPast)
+                maskFuture = np.isnan(albFuture)
                 combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
                 filenames = ['albedo','class','grain', 'density', 'dust', 'algae']
@@ -448,8 +449,8 @@ def imageinterpolator(years, months, tile):
                 classFuture = imageFuture.classified.values
 
                 # create mask
-                maskPast = np.isnan(albArrayPast)
-                maskFuture = np.isnan(albArrayFuture)
+                maskPast = np.isnan(albPast)
+                maskFuture = np.isnan(albFuture)
                 combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
                 filenames = ['albedo','class']

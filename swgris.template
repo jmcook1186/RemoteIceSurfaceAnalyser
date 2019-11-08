@@ -1,11 +1,13 @@
 [options]
+;running locally or on VM?
+vm=False
 ; Tiles to process.
 ; Each tile must be in DOUBLE quotation marks; separate entries by commas
 tiles=["22WEV"]
 ; Years to process.
 years=[2016]
 ; Months to process.
-months=[6]
+months=[7]
 ; Name of pkl file (place the file in PROCESS_DIR).
 classifier=Sentinel2_classifier.pkl
 ; Name of icemask file (place in PROCESS_DIR).
@@ -15,7 +17,7 @@ resolution=20
 ; Create and save figures
 savefigs=True
 ; retrieve snicar params
-retrieve_snicar_params=False
+retrieve_snicar_params=True
 ; interpolate to infill missing tiles
 interpolate_missing_tiles=True
 
