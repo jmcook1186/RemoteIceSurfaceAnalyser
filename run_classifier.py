@@ -47,6 +47,7 @@ import sentinel2_azure
 import Big_Sentinel_Classifier
 import xr_cf_conventions
 
+
 # Get project configuration
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
@@ -67,6 +68,14 @@ plt.ioff()
 ###################################################################################
 ######## DEFINE BLOB ACCESS, GLOBAL VARIABLES AND HARD-CODED PATHS TO FILES #######
 ###################################################################################
+
+print("RUNNING WITH THE FOLLOWING CONFIGURATION:")
+print("SNICAR CONFIG = ", config.get('options','retrieve_snicar_params'))
+print("FIGURE CONFIG = ", config.get('options','savefigs'))
+print("INTERPOLATION CONFIG = ", config.get('options','interpolate_missing_tiles'))
+print("TILES: ", config.get('options','tiles'), " YEARS: ", config.get('options','years'), "MONTHS: ", config.get('options','months'))
+print("Thresholds: Cloud cover= ", config.get('thresholds','cloudCoverThresh'), " Ice Area = ", config.get('thresholds','minArea'))
+print()
 
 img_path = os.environ['PROCESS_DIR']
 
@@ -208,31 +217,31 @@ for tile in tiles:
                     print("\n NOW RUNNING SNICAR INVERSION FUNCTION \n")
                     
                     # run snicar inversion
-                    bsc.invert_snicar(s2xr, mask2)
+                    bsc.invert_snicar(s2xr,mask2)
 
-                    # Add metadata to retrieved snicar parameter arrays
-                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
+                    # Add metadata to retrieved snicar parameter arrays + mask
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
                         side_length.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         side_length.name = "Grain size"
                         side_length.attrs['long_name'] = 'Grain size in microns. Assumed homogenous to 10 cm depth'
                         side_length.attrs['units'] = 'Microns'
                         side_length.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
                     
-                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'density.nc')) as density:
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'densities.nc')) as density:
                         density.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         density.name = "Density"
                         density.attrs['long_name'] = 'Ice column density in kg m-3. Assumed to be homogenous to 10 cm depth'
                         density.attrs['units'] = 'Kg m-3'
                         density.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
-                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'dust.nc')) as dust:
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'dust.nc')) as dust:
                         dust.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         dust.name = "Dust"
                         dust.attrs['long_name'] = 'Dust mass mixing ratio in upper 1mm of ice column'
                         dust.attrs['units'] = 'ng/g or ppb'
                         dust.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
-                    with xr.load_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
                         algae.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         algae.name = "Algae"
                         algae.attrs['long_name'] = 'Ice column algae in kg m-3. Assumed to be homogenous to 10 cm depth'
@@ -331,3 +340,4 @@ for tile in tiles:
     np.savetxt(str(savepath + "/good_tiles.csv"), good_tile_list, delimiter=",", fmt='%s')
 
 print("\nCOMPLETED RUN")
+

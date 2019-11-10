@@ -329,10 +329,18 @@ def imageinterpolator(years, months, tile):
     # Now create list of DOYs and list of strings for all the "good" dates in the image repo
     # strip out the date from the filename and insert underscores to separate out YYYY, MM, DD so formats are consistent
     for i in np.arange(0, len(DateList), 1):
-        DateList[i] = DateList[i][69:-33]
-        DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
+
+        if config.get('options','VM')==True:
+            DateList[i] = DateList[i][79:-33]
+            DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
                                                                             6:8])  # format string to match format defined above
-        DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
+            DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
+
+        else:
+            DateList[i] = DateList[i][69:-33]
+            DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
+                                                                            6:8])  # format string to match format defined above
+            DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
 
     # compare full season DOY list with DOY list in image repo to identify only the missing dates between seasonStart and seasonEnd
     DOYlist = np.array(DOYlist)
@@ -417,12 +425,12 @@ def imageinterpolator(years, months, tile):
                     counter +=1
                     newImage = None # flush disk
 
-                albedo = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
-                surfclass = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
-                grain = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc'))
-                density = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc'))
-                dust = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dust.nc'))
-                algae = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc'))
+                albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
+                surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
+                grain = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc'))
+                density = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc'))
+                dust = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dust.nc'))
+                algae = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc'))
 
                 # collate data into xarray dataset and copy metadata from PAST
                 newXR = xr.Dataset({

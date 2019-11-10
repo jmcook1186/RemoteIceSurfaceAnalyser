@@ -135,7 +135,7 @@ class SurfaceClassifier:
         return mask2
 
 
-    def invert_snicar(self, S2vals):
+    def invert_snicar(self, S2vals, mask2):
 
         """
         Pixelwise retrieval of snicar RT params by matching spectra against snicar-generated LUT loaded from process_dir
@@ -201,8 +201,9 @@ class SurfaceClassifier:
         # only the first value from the parameeter arrays are taken.
 
         counter = 0
-        param_names = ['side_lengths','density','dust','algae']
+        param_names = ['side_lengths','densities','dust','algae']
         for param in [side_lengths, densities, dust, algae]:
+
             for i in np.arange(0,len(param),1):
                 
                 if i ==0:
@@ -212,7 +213,8 @@ class SurfaceClassifier:
 
             result_array = result_array.reshape(int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT))))
             
-            resultxr = xr.DataArray(result_array,dims=['x','y']).chunk(2000,2000)
+            resultxr = xr.DataArray(data=result_array,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
+            resultxr = resultxr.where(mask2>0)
             resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
 
             counter +=1
