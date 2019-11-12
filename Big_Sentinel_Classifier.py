@@ -135,54 +135,45 @@ class SurfaceClassifier:
         return mask2
 
 
-    def invert_snicar(self, S2vals, mask2):
+    def invert_snicar(self, S2vals, mask2, predicted):
 
         """
         Pixelwise retrieval of snicar RT params by matching spectra against snicar-generated LUT loaded from process_dir
 
         """
 
-        print("\nRETRIEVING SNICAR PARAMS")
-        band_idx = pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9], name='bands')
-
-        # concatenate the bands into a single dimension ('bands_idx') in the data array
-        concat = xr.concat([S2vals.Data.loc[{self.NAME_bands:'B02'}], S2vals.Data.loc[{self.NAME_bands:'B03'}], 
-        S2vals.Data.loc[{self.NAME_bands:'B04'}], S2vals.Data.loc[{self.NAME_bands:'B05'}], S2vals.Data.loc[{self.NAME_bands:'B06'}], 
-        S2vals.Data.loc[{self.NAME_bands:'B07'}],S2vals.Data.loc[{self.NAME_bands:'B8A'}], S2vals.Data.loc[{self.NAME_bands:'B11'}], S2vals.Data.loc[{self.NAME_bands:'B12'}]], band_idx)
-
         # stack the values into a 1D array
-        stacked = concat.stack(allpoints=['y', 'x'])
+        stacked = S2vals.Data.stack(allpoints=[self.NAME_y,self.NAME_x])
 
         # Transpose and rename so that DataArray has exactly the same layout/labels as the training DataArray.
         # mask out nan areas not masked out by GIMP
         stackedT = stacked.T
         stackedT = stackedT.rename({'allpoints': 'samples'})
 
-        # copy range of values used to generate LUT. THESE MUST MATCH THOSE USED TO BUILD LUT!!!
-        side_lengths = [[3000,3000,3000,3000,3000],[5000,5000,5000,5000,5000],[7000,7000,7000,7000,7000],[9000,9000,9000,9000,9000],[12000,12000,12000,12000,12000],[15000,15000,15000,15000,15000]]
-        densities = [[300,300,300,300,300],[400,400,400,400,400],[500,500,500,500,500],[600,600,600,600,600],[700,700,700,700,700],[800,800,800,800,800],[900,900,900,900,900]]
-        dust = [[10000,0,0,0,0],[50000,0,0,0,0],[100000,0,0,0,0],[500000,0,0,0,0],[1000000,0,0,0,0],[1500000,0,0,0,0],[2000000,0,0,0,0]]
-        algae = [[10000,0,0,0,0],[50000,0,0,0,0],[100000,0,0,0,0],[500000,0,0,0,0],[1000000,0,0,0,0],[1500000,0,0,0,0],[2000000,0,0,0,0]]
+        # copy LUT inpout values from config file
+        side_lengths = confg.get('LUT','side_lengths')
+        densities = confg.get('LUT','densities')
+        dust = config.get('LUT','dust')
+        algae = confg.get('LUT','algae')
         wavelengths = np.arange(0.3,5,0.01)
 
-        # set index in wavelength array corresponding to centre WL for each S2 band
-        # e.g. for idx[0] == 19, wavelengths[19] = 490 nm
-        idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
+        # get indexes corresponding to S2 centre wavelengths
+        idx = config.get('LUT','idx')
 
         # RECHUNK STACKEDT: choice of chunk size is crucial for maximising speed while preventing memory over-allocation.
-        # While 10000 seems small there are very large intermediate arrays spawned by the compute() function.
+        # While 20000 seems small there are very large intermediate arrays spawned by the compute() function.
 
         stackedT = stackedT.chunk(20000,9)
 
         # reformat LUT: flatten to 2D array with column per combination of RT params, row per wavelength
-        dirtyLUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
+        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
         array = []
 
         # find most similar SNICAR spectrum for each pixel
         # astype(float 16) to reduce memory allocation (default was float64)
-        dirtyLUT = dirtyLUT[:,idx] # reduce wavelengths to match sample spectrum
-        dirtyLUT = xr.DataArray(dirtyLUT,dims=('spectrum','bands')).astype(np.float16)
-        error_array = dirtyLUT-stackedT.astype(np.float16) # subtract reflectance from snicar reflectance pixelwise
+        LUT = LUT[:,idx] # reduce wavelengths to match sample spectrum
+        LUT = xr.DataArray(LUT,dims=('spectrum','bands')).astype(np.float16)
+        error_array = LUT-stackedT.astype(np.float16) # subtract reflectance from snicar reflectance pixelwise
 
         # average error over bands, then provide index of minimum error (index refers to position in flattened LUT for closest matching spectrum)
         idx_array = xr.apply_ufunc(abs,error_array,dask='allowed').mean(dim='bands').argmin(dim='spectrum') 
@@ -194,13 +185,14 @@ class SurfaceClassifier:
         # flush disk
         idx_array = None
         error_array = None
-        dirtyLUT = None
+        LUT = None
 
         #use the indexes to retrieve the actual parameter values for each pixel from the LUT indexes
         # since the values are equal for all layers (side_lengths and density) or only the top layer (LAPs)
         # only the first value from the parameeter arrays are taken.
 
         counter = 0
+
         param_names = ['side_lengths','densities','dust','algae']
         for param in [side_lengths, densities, dust, algae]:
 
@@ -215,11 +207,26 @@ class SurfaceClassifier:
             
             resultxr = xr.DataArray(data=result_array,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
             resultxr = resultxr.where(mask2>0)
-            resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
 
+#################################################################### 
+## ADDED TO PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
+
+            resultxr = resultxr.where(predictedxr=='WAT',0)
+            resultxr = resultxr.where(predictedxr=='CC',0)
+            resultxr = resultxr.where(predictedxr=='SN',0)
+
+###################################################################
+###################################################################
+
+            resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
+            
+            param_array = None
+            result_array = None
+            resultxr = None
             counter +=1
 
-        # retrieved params are saved as temporary netcdfs to the process_dir and then loaded into the final dataset in run_classifier.py
+        # retrieved params are saved as temporary netcdfs to the process_dir and then collated directly from 
+        # file into the final dataset in run_classifier.py
 
         return
 
@@ -362,3 +369,4 @@ class SurfaceClassifier:
             #####################################
 
         return newSummaryDF
+

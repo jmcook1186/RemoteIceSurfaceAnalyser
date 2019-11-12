@@ -28,7 +28,7 @@ AZURE_SECRET - path and filename of config file containing Azure secret informat
 # TODO: make plotting consistent between "good" images and interpolated images in sentinel2_tools.imageinterpolator() function
 # TODO: devise some automated protection against interpolating cloudy pixels in sentinel2_tools.imageinterpolator()
 # TODO: consider nearest-neighbour type spatial interpolation over cloudy pixels (could be part of previous todo)
-# TODO: create option for plotting algae, dust and grain size as well as albedo/class
+# TODO: move all plotting to external script that can be applied to the final saved datasets(get it out of the processing pipeline).
 
 import sys
 import os
@@ -217,7 +217,7 @@ for tile in tiles:
                     print("\n NOW RUNNING SNICAR INVERSION FUNCTION \n")
                     
                     # run snicar inversion
-                    bsc.invert_snicar(s2xr,mask2)
+                    bsc.invert_snicar(s2xr,mask2, predicted)
 
                     # Add metadata to retrieved snicar parameter arrays + mask
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
