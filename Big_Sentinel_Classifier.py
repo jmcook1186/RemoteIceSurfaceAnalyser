@@ -6,8 +6,12 @@ Functions for classifying Sentinel 2 images using a trained classification model
 import numpy as np
 import pandas as pd
 import xarray as xr
+import ebmodel as ebm
+import multiprocessing as mp
+import ebmodel as ebm
 import glob
 import os
+
 try:
     import joblib
 except ImportError:
@@ -197,27 +201,22 @@ class SurfaceClassifier:
         for param in [side_lengths, densities, dust, algae]:
 
             for i in np.arange(0,len(param),1):
-                
-                if i ==0:
+                if i ==0: # in first loop, pixels !=i should be replaced by param_array values, as result_array doesn't exist yet
                     result_array = np.where(param_array[counter]==i, param[i][0], param_array[counter])
                 else:
                     result_array = np.where(param_array[counter]==i, param[i][0], result_array)
 
+            # reshape to original dims, add metadata, convert to xr DataArray, apply mask
             result_array = result_array.reshape(int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT))))
-            
             resultxr = xr.DataArray(data=result_array,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
             resultxr = resultxr.where(mask2>0)
 
-#################################################################### 
-## ADDED TO PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
-
+            # PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
             resultxr = resultxr.where(predictedxr=='WAT',0)
             resultxr = resultxr.where(predictedxr=='CC',0)
             resultxr = resultxr.where(predictedxr=='SN',0)
 
-###################################################################
-###################################################################
-
+            # send to netcdf and flush memory
             resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
             
             param_array = None
@@ -229,6 +228,78 @@ class SurfaceClassifier:
         # file into the final dataset in run_classifier.py
 
         return
+
+    def energy_balance(tile, date, savepath, mask2, S2vals):
+        
+        n_cpus = mp.cpu_count()
+
+        # open data from netcdf and extract albedo layer, divide into n_cpus number of chunks
+        ds = xr.open_dataset(savepath + f"{tile}_{date}_Classification_and_Albedo_Data.nc")
+        albedo = np.ravel(np.array(ds.albedo.values))
+        albedo_chunks = np.array_split(albedo,n_cpus)
+
+        
+        # define function to be applied pixelwise (distributed using multiprocessing)
+        
+        def runit(alb):
+           ## Input Data, as per first row of Brock and Arnold (2000) spreadsheet
+            lat = 67.0666
+            lon = -49.38
+            lon_ref = 0
+            summertime = 0
+            slope = 1.
+            aspect = 90.
+            elevation = 1020.
+            albedo = alb
+            roughness = 0.005
+            met_elevation = 1020.
+            lapse = 0.0065
+
+            day = 202
+            time = 1200
+            inswrad = 571
+            avp = 900
+            airtemp = 5.612
+            windspd = 3.531
+
+            SWR,LWR,SHF,LHF = ebm.calculate_seb(lat, lon, lon_ref, day, time, summertime, slope, aspect, elevation,
+                                                met_elevation, lapse, inswrad, avp, airtemp, windspd, albedo, roughness)
+
+            sw_melt, lw_melt, shf_melt, lhf_melt, total = ebm.calculate_melt(
+                SWR,LWR,SHF,LHF, windspd, airtemp)
+
+            # flush memory
+            sw_melt = None
+            lw_melt = None
+            shf_melt = None
+            lhf_melt = None
+            SWR = None
+            LWR = None
+            SHF = None
+            LHF = None
+
+            return total
+
+
+        with mp.Pool(processes=n_cpus) as pool:
+
+            # starts the sub-processes without blocking
+            # pass the chunk to each worker process
+            result = pool.map(runit,albedo)
+
+        # reshape to original dims, convert to xr DataArray, apply mask and send to netcdf
+        result = np.reshape(np.array(result),(5490,5490))
+        resultxr = xr.DataArray(data=total,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
+        resultxr = resultxr.where(mask2>0)
+        resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + {tile} + f"MELT_{tile}_{date}.nc"))
+
+        # flush memory
+        result = None
+        resultxr = None
+
+        return
+
+
 
 
 
@@ -273,8 +344,14 @@ class SurfaceClassifier:
 
             summaryxr.to_netcdf(str(savepath+f'summary_data_{tile}_{date}.nc'))
 
-            algal_coverage = (sum(summaryxr.sel(classID=['HA', 'LA'], metric='count')) / (
-                sum(summaryxr.sel(classID=['HA','LA','WAT', 'CC', 'CI'], metric='count').values))) * 100
+            summaryxr = None
+            newSummaryDF = None
+            predicted = None
+            albedo = None
+            albedoDF = None
+            countDF = None
+            summaryDF = None
+            summaryDF = None
 
             #####################################
 

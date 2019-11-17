@@ -4,14 +4,14 @@ this repository contains in-development code for automated downloading, processi
 ## Setup
 
 ### Hardware
-The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when realy necessary. However, the invert_snicar() function is demanding and can take up to a day to run on my 8 core i7-700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 64 core Azure Linux Data Science Machine, in which case one tile takes about 1 hour to process.
+The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when realy necessary. However, the invert_snicar() function is demanding and can take up to a day to run on my 8 core i7-7700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 64 core Azure Linux Data Science Machine, in which case one tile takes 53 mins to process.
 
 ### Environment
 The environment can be set up manually using the following commands:
 
-    conda create -n IceSurfClassifier -c conda-forge python ipython xarray scikit-learn georaster gdal matplotlib
+    conda create -n IceSurfClassifier -c conda-forge python ipython xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
     conda activate azure
-    pip install azure-storage-blob
+    pip install azure-storage-blob sklearn-xarray sentinelsat
 
 or alternatively the environment can be built from environment.yaml using:
 
@@ -84,8 +84,7 @@ Surface albedo is calculated using Liang et al's (2000) narrowband to broadband 
 
 ### Snicar retrievals
 
-There is an option in the template file to retrieve snicar parameters. If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of
-snicar-generated spectra. The snicar parameters (grain size, density, dust concentration, algae concentration) used to generate the closest-matching spectra are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. 
+There is an option in the template file to retrieve snicar parameters. If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of snicar-generated spectra. The snicar parameters (grain size, density, dust concentration, algae concentration) used to generate the closest-matching spectra are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. 
 
 Note that despite the LUT approach, the snicar retrieval is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure D64_v3s Linux Data Science Machine with 64 cores to distribute the processing, which enables the retrieval function to complete in 53 minutes per tile. Testing on a single S2 tile on JC's laptop (i7-7700 GHz processor, 8 cores, 32GB RAM) was aborted after 10 hours. Increasing the size of the LUT increases the computation time significantly. Currently the LUT comprises 2058 individual snicar runs, produced by running snicar with all possible combinations of 6 grain sizes, 7 densities, 7 dust concentrations and 7 algal concentrations. 
 

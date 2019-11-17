@@ -16,30 +16,44 @@ import matplotlib as mpl
 import re
 plt.style.use('tableau-colorblind10')
 
-# PLOTTING (if toggled)
+#############################################################
+#############################################################
+# USER DEFINITIONS: SET VALUES THEN RUN SCRIPT
 
-###### user-definitions #######
-
-tile_selection='INDIVIDUAL_DATE' # choose "INDIVIDUAL_DATE" or "ALL DATES"
-parameters = ['classified','albedo'] # choose one or multiple from ['classified','albedo','grain_size','density','algae','dust']
+tile_selection='ALLDATES' # choose "INDIVIDUAL_DATE" or "ALL DATES"
+tileID = '22wev'
+path = '/home/joe/Code/BigIceSurfClassifier/Process_Dir/outputs/'
+date = '20160804'
+parameters = ['classified','albedo']#,'grain_size','density','algae','dust']
 output_format = 'jpg' # file extension without leading stop (.)
-output_res = 100
+output_res = 150
 figsize=(15,15)
+interactive_plotting=False
+savefig=True
+
+
+#############################################################
+#############################################################
+
+
+# toggle intercative plotting (toggle off for batch figure saving)
+if interactive_plotting:
+    pass
+else:
+    plt.ioff()
 
 # set colormap
 cmap1 = mpl.colors.ListedColormap(
     ['purple', 'white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
 cmap1.set_under(color='white')  # make sure background is white
+
 cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
 cmap2.set_under(color='white')  # make sure background is white
+
 
 # file selection from output dir
 if tile_selection=='INDIVIDUAL_DATE':
     
-    tileID = '22wev'
-    path = '/home/joe/Code/BigIceSurfClassifier/Process_Dir/outputs/'
-    date = '20160601'
-
     filelist = glob.glob(str(path + tileID + "/" + tileID + "_" + date + "*Classification_and_Albedo_Data.nc"))
 
 elif tile_selection=='ALLDATES':
@@ -61,17 +75,69 @@ for filename in filelist:
             plt.figure(figsize=figsize)
             plt.imshow(tile.classified.values, cmap=cmap1, vmin=0, vmax=6),plt.colorbar()
             plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
-            # plt.title('Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
+            plt.xticks(np.arange(0,len(tile.x),len(tile.x)/2), (tile.x.values[0],tile.x.values[int(len(tile.x)/2)],tile.x.values[-1]),rotation=30)
+            plt.yticks(np.arange(0,len(tile.y),len(tile.y)/2), (tile.y.values[0],tile.y.values[int(len(tile.y)/2)],tile.y.values[-1]),rotation=30)
             plt.rcParams["axes.grid"] = False
-            plt.savefig(str(path + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
+            if savefig:
+                plt.savefig(str(path + tileID + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
 
         elif param=='albedo':
             tile = xr.open_dataset(filename)
             plt.figure(figsize=figsize)
             plt.imshow(tile.albedo.values, cmap=cmap2, vmin=0, vmax=1),plt.colorbar()
             plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+            plt.xticks(np.arange(0,len(tile.x),len(tile.x)/2), (tile.x.values[0],tile.x.values[int(len(tile.x)/2)],tile.x.values[-1]),rotation=30)
+            plt.yticks(np.arange(0,len(tile.y),len(tile.y)/2), (tile.y.values[0],tile.y.values[int(len(tile.y)/2)],tile.y.values[-1]),rotation=30)
             plt.rcParams["axes.grid"] = False
-            plt.savefig(str(path + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
-        
+            if savefig:
+                plt.savefig(str(path + tileID + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
 
-        ### continue elifs for other params...
+        elif param=='grain_size':
+            tile = xr.open_dataset(filename)
+            plt.figure(figsize=figsize)
+            plt.imshow(tile.grain_size.values, cmap='BuPu'),plt.colorbar()
+            plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+            plt.xticks(np.arange(0,len(tile.x),len(tile.x)/2), (tile.x.values[0],tile.x.values[int(len(tile.x)/2)],tile.x.values[-1]),rotation=30)
+            plt.yticks(np.arange(0,len(tile.y),len(tile.y)/2), (tile.y.values[0],tile.y.values[int(len(tile.y)/2)],tile.y.values[-1]),rotation=30)
+            plt.rcParams["axes.grid"] = False
+            if savefig:
+                plt.savefig(str(path + tileID + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
+        
+        elif param=='density':
+            tile = xr.open_dataset(filename)
+            plt.figure(figsize=figsize)
+            plt.imshow(tile.density.values, cmap='GnBu'),plt.colorbar()
+            plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+            plt.xticks(np.arange(0,len(tile.x),len(tile.x)/2), (tile.x.values[0],tile.x.values[int(len(tile.x)/2)],tile.x.values[-1]),rotation=30)
+            plt.yticks(np.arange(0,len(tile.y),len(tile.y)/2), (tile.y.values[0],tile.y.values[int(len(tile.y)/2)],tile.y.values[-1]),rotation=30)
+            plt.rcParams["axes.grid"] = False
+            if savefig:
+                plt.savefig(str(path + tileID + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
+
+        elif param=='dust':
+            tile = xr.open_dataset(filename)
+            plt.figure(figsize=figsize)
+            plt.imshow(tile.dust.values, cmap='cividis'),plt.colorbar()
+            plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+            plt.xticks(np.arange(0,len(tile.x),len(tile.x)/2), (tile.x.values[0],tile.x.values[int(len(tile.x)/2)],tile.x.values[-1]),rotation=30)
+            plt.yticks(np.arange(0,len(tile.y),len(tile.y)/2), (tile.y.values[0],tile.y.values[int(len(tile.y)/2)],tile.y.values[-1]),rotation=30)
+            plt.rcParams["axes.grid"] = False
+            if savefig:
+                plt.savefig(str(path + tileID + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
+
+        elif param=='algae':
+            tile = xr.open_dataset(filename)
+            plt.figure(figsize=figsize)
+            plt.imshow(tile.algae.values, cmap='plasma'),plt.colorbar()
+            plt.ylabel('Latitude (UTM Zone 22N)'), plt.xlabel('Longitude (UTM Zone 22N)')
+            plt.xticks(np.arange(0,len(tile.x),len(tile.x)/2), (tile.x.values[0],tile.x.values[int(len(tile.x)/2)],tile.x.values[-1]),rotation=30)
+            plt.yticks(np.arange(0,len(tile.y),len(tile.y)/2), (tile.y.values[0],tile.y.values[int(len(tile.y)/2)],tile.y.values[-1]),rotation=30)
+            plt.rcParams["axes.grid"] = False
+            if savefig:
+                plt.savefig(str(path + tileID + f'{param}_{tileID}_{date}.{output_format}'),facecolor='w',dpi=output_res)
+    
+        if tile_selection == "ALLDATES":
+            if interactive_plotting == False:
+                plt.close() # prevent too many open figs in batches by closing plt between dates
+
+

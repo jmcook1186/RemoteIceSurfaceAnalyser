@@ -391,13 +391,13 @@ def imageinterpolator(years, months, tile):
                 classPast = imagePast.classified.values
                 classFuture = imageFuture.classified.values
                 grainPast = imagePast.grain_size.values
-                grainFuture = imagePast.grain_size.values
+                grainFuture = imageFuture.grain_size.values
                 densityPast = imagePast.density.values
-                densityFuture = imagePast.density.values
+                densityFuture = imageFuture.density.values
                 dustPast = imagePast.dust.values
-                dustFuture = imagePast.dust.values
+                dustFuture = imageFuture.dust.values
                 algaePast = imagePast.algae.values
-                algaeFuture = imagePast.algae.values
+                algaeFuture = imageFuture.algae.values
 
                 # create mask
                 maskPast = np.isnan(albPast)
@@ -407,23 +407,45 @@ def imageinterpolator(years, months, tile):
                 filenames = ['albedo','class','grain', 'density', 'dust', 'algae']
                 counter = 0
                 # loop through params calculating linear regression
-                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(dustPast,dustFuture),(algaePast,algaeFuture)]:
-                    
-                    slopes = (i - j) / (closestFuture - closestPast)
-                    intercepts = i - (slopes * closestPast)
-                    newImage = slopes * Missing + intercepts
+                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(dustPast,dustFuture),(algaePast,algaeFuture)]:                 
 
-                    # apply mask to synthetic images
-                    newImage = np.ma.array(newImage, mask=combinedMask)
-                    newImage = newImage.filled(np.nan)
-                    newImage = abs(newImage)
-                    newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
-                    newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                    if counter == 1: # different function required for classification as it is not a continuous scale
+                        
+                        # albedo change is used to determine whether the past or future class is assigned
+                        # so first calculate change in albedo
+                        albedoDiffs = albPast - albFuture
+                        albedoDiffs = albedoDiffs*0.5
+                        albedoDiffsPredicted = albAPast - newImage
+
+                        newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, 
+                        classFuture, classPast)
+
+                        newClassImage = np.ma.array(newClassImage, mask=combinedMask)
+                        newClassImage = newClassImage.filled(np.nan)
+
+                        newClassImagexr = xr.DataArray(newClassImage)
+                        newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'), mode='w')
+                        newClassImagexr = None
+
+
+                    else:
+                        slopes = (i - j) / (closestFuture - closestPast)
+                        intercepts = i - (slopes * closestPast)
+                        newImage = slopes * Missing + intercepts
+
+                        # apply mask to synthetic images
+                        newImage = np.ma.array(newImage, mask=combinedMask)
+                        newImage = newImage.filled(np.nan)
+                        newImage = abs(newImage)
+                        newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+                        newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                        
+                        newImagexr = xr.DataArray(newImage)
+                        newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'), mode='w')
+                        newImagexr = None
+                        counter +=1
+                        # newImage = None # flush disk
                     
-                    newImagexr = xr.DataArray(newImage)
-                    newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
-                    counter +=1
-                    newImage = None # flush disk
 
                 albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
                 surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
@@ -466,25 +488,40 @@ def imageinterpolator(years, months, tile):
 
                 # loop through params calculating linear regression
                 for i,j in [(albPast,albFuture),(classPast,classFuture)]:
-                    
-                    slopes = (i - j) / (closestFuture - closestPast)
-                    intercepts = i - (slopes * closestPast)
-                    newImage = slopes * Missing + intercepts
 
-                    # apply mask to synthetic images
-                    newImage = np.ma.array(newImage, mask=combinedMask)
-                    newImage = newImage.filled(np.nan)
-                    newImage = abs(newImage)
-                    newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
-                    newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
-                    
-                    newImagexr = xr.DataArray(newImage)
-                    newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
-                    counter +=1
-                    newImage = None # flush disk
+                    if counter == 1:
+                        # albedo change is used to determine whether the past or future class is assigned
+                        # so first calculate change in albedo
+                        albedoDiffs = albPast - albFuture
+                        albedoDiffs = albedoDiffs*0.5
+                        albedoDiffsPredicted = albPast - newImage
 
-                albedo = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
-                surfclass = xr.load_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
+                        newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, classFuture, classPast)
+                        newClassImage = np.ma.array(newClassImage, mask=combinedMask)
+                        newClassImage = newClassImage.filled(np.nan)
+                        newClassImagexr = xr.DataArray(newClassImage)
+                        newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
+                        newClassImagexr = None
+                    
+                    else:
+                        slopes = (i - j) / (closestFuture - closestPast)
+                        intercepts = i - (slopes * closestPast)
+                        newImage = slopes * Missing + intercepts
+
+                        # apply mask to synthetic images
+                        newImage = np.ma.array(newImage, mask=combinedMask)
+                        newImage = newImage.filled(np.nan)
+                        newImage = abs(newImage)
+                        newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+                        newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                        newImagexr = xr.DataArray(newImage)
+                        newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
+                        newImagexr = None
+                        counter +=1
+
+
+                albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
+                surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
 
                 # collate data into xarray dataset and copy metadata from PAST
                 newXR = xr.Dataset({
@@ -501,6 +538,12 @@ def imageinterpolator(years, months, tile):
             # save synthetic image in same format in same directory as original "good" images
             newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
             print("\nDataset saved")
+
+            files = glob.glob(str(os.environ['PROCESS_DIR'] +'interpolated_'+'*.nc'))
+            for f in files:
+                os.remove(f)
+
+            
 
             if config.get('options','savefigs')=='True':
 

@@ -1,0 +1,10 @@
+PARAMS FOR BIG ICE SURF CLASSIFIER
+
+DATE/TIME (yyyy,mm,dd,hh,mm,ss) 2019-11-17 09:47:02.525005
+SNICAR CONFIG = False
+INTERPOLATION CONFIG = True
+Thresholds: Cloud cover= 10, 
+Ice Area = 50
+TILES: ["22WEV"]
+YEARS: [2016]
+MONTHS: [7]
