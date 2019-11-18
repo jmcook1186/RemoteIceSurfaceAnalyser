@@ -19,9 +19,9 @@ savefigs=False
 ; retrieve snicar params
 retrieve_snicar_params=False
 ; interpolate to infill missing tiles
-interpolate_missing_tiles=True
+interpolate_missing_tiles=False
 ; run energy balance model to predict melt?
-calculate_melt=False
+calculate_melt=True
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).

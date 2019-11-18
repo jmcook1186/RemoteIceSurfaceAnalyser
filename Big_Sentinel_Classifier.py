@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 import ebmodel as ebm
-import multiprocessing as mp
 import ebmodel as ebm
 import glob
 import os
@@ -229,19 +228,8 @@ class SurfaceClassifier:
 
         return
 
-    def energy_balance(tile, date, savepath, mask2, S2vals):
-        
-        n_cpus = mp.cpu_count()
+    def run_ebmodel(self, alb):
 
-        # open data from netcdf and extract albedo layer, divide into n_cpus number of chunks
-        ds = xr.open_dataset(savepath + f"{tile}_{date}_Classification_and_Albedo_Data.nc")
-        albedo = np.ravel(np.array(ds.albedo.values))
-        albedo_chunks = np.array_split(albedo,n_cpus)
-
-        
-        # define function to be applied pixelwise (distributed using multiprocessing)
-        
-        def runit(alb):
            ## Input Data, as per first row of Brock and Arnold (2000) spreadsheet
             lat = 67.0666
             lon = -49.38
@@ -279,28 +267,6 @@ class SurfaceClassifier:
             LHF = None
 
             return total
-
-
-        with mp.Pool(processes=n_cpus) as pool:
-
-            # starts the sub-processes without blocking
-            # pass the chunk to each worker process
-            result = pool.map(runit,albedo)
-
-        # reshape to original dims, convert to xr DataArray, apply mask and send to netcdf
-        result = np.reshape(np.array(result),(5490,5490))
-        resultxr = xr.DataArray(data=total,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
-        resultxr = resultxr.where(mask2>0)
-        resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + {tile} + f"MELT_{tile}_{date}.nc"))
-
-        # flush memory
-        result = None
-        resultxr = None
-
-        return
-
-
-
 
 
     def albedo_report(self, tile, date, savepath):
