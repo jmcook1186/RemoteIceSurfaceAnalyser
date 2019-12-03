@@ -4,7 +4,7 @@ this repository contains in-development code for automated downloading, processi
 ## Setup
 
 ### Hardware
-The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when realy necessary. However, the invert_snicar() function is demanding and can take up to a day to run on my 8 core i7-7700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 64 core Azure Linux Data Science Machine, in which case one tile takes 53 mins to process.
+The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when realy necessary. However, the invert_snicar() function is demanding and can take up to a day to run on my 8 core i7-7700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 64 core Azure Linux Data Science Machine, in which case one tile takes 53 mins to process. With the SNICAR inversion and the EB model functions both toggled ON, ~1 hour 5 mins per tile. Bear in mind that in Nov 2019, the VM cost is ~£3/hour.
 
 ### Environment
 The environment can be set up manually using the following commands:
@@ -53,15 +53,60 @@ With a shell script created to set these environment variables, execute `source 
 The user-defined variable values are all defined in a template file (e.g.  `swgris.template`). This is where the main script grabs values to configure the image downloading, processing, classification and reporting.
 The user should enter their desired values into the template file prior to running the classifier. Multiple templates can be saved and called along with the classifier.
 
-## Use
+### Directory Structure
 
-There are two main steps: (1) pre-processing Sentinel-2 imagery, and (2) running the classification and albedo algorithms. Driver scripts are provided in this repository to accomplish these steps.
+The directories should be arranged as follows. It is critical that this structure is maintained else paths will fail.
+
+```
+Big Ice Surf Classifier
+|
+|----- run_classifier.py
+|----- Big_Sentinel_Classifier.py
+|----- BISC_param_Log.txt
+|----- BISC_plot_figures.py
+|----- download_process_s2.py
+|----- ebmodel.py
+|----- environment.yml
+|----- README.md
+|----- sentinel2_azure.py
+|----- sentinel2_tools.py
+|----- setup_classifier.sh
+|----- xr_cf_conventions.py
+|----- swgris.template
+|----- .azure_secret
+|----- .cscihub_secret
+|
+|
+|-----Process_Dir
+|           |
+|           |---ICE_MASK.nc
+|           |---merged_mask.tif
+|           |---Sentinel2_classifier.pkl
+|           |---SNICAR_LUT_2058.npy
+|           |---will be populated with band images and auto-flushed at end of run
+|           |
+|            Outputs
+|               |
+|               |
+|              Tile
+|               |
+|               |---To be populated with output data
+|
+|
+```
+
+
+## How to run
+
+There are two main steps: (1) pre-processing Sentinel-2 imagery, and (2) running the classification, albedo, snicar retrieval and eb-modelling algorithms. These are configured by altering the template file.
 
 Before you begin, make sure you have created a `template` file containing the settings for your desired workflow, and that you have set the environment variables needed by the workflow (see 'Setup' above).
 
 If you have created the suggested bash shell script, then simply run:
 
     source setup_classifier.sh
+
+The configuration details will automatically be saved to a text file (BISC_Param_Log.txt). A list of the tile/date combinations that are discarded due to QC flags or download errors are saved to csv files (aborted_downloads.csv, rejected_by_qc.csv) and so is a list of all tile/date combinations successfully analysed (good_tiles.csv).
 
 
 ### Pre-processing
@@ -73,6 +118,8 @@ Run `python download_process_s2.py <template.template>`.
 
 Run `python run_classifier.py <template.template>`.
 
+
+## Functionality
 
 ### Classification
 
@@ -92,8 +139,27 @@ Note that despite the LUT approach, the snicar retrieval is computatonally expen
 
 There is an option to toggle interpolation on/off. If interpolation is toggled on, the script will use pixel-wise linear interpolation to generate synthetic datasets for each missing date in the time series. Dates may be missing from the time series sue to a lack of overpass or a data quality issue such as excessive cloud cover. The interpolation function identifies these missing tiles, then identifies the most recent and nearest future dates where a valid dataset was acquired. It then applies a point-to-point linear regression between the values in each pixel in the past image and the corresponding pixel in the future image. The pixel values are then predicted using the regression equation for the missing dates. Recommend also scanning through the images manually after interpolation because occasionally interpolating pixels that were cloud-free in the past and cloudy in the future or vice versa can lead to unrealistic interpolation results. Anomalous dates should be manually discarded or alternatively the interpoaltion function could be run as a standalone with "good" past and future tiles manually selected.
 
+### Energy Balance Modelling
+
+There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 12 mins on 64 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
+
+## Troubleshooting
+
+### Azure and SentinelHub
+The user must have their own Azure account with blob storage access. The scripts here manage the creation of storage blobs and i/o to and from them, but this relies upon the user having a valid account name and access key saved in an external file ".azure_secret" in the process directory. The same is true of the copernicus science hub - the user must have a valid username and password stored in an external file ".cscihub_secret" saved in the process directory to enable batch downloads of Sentinel-2 images that are not already saved in blob storage.
+
+###   File "/...", line x, in load_img_to_xr, raise ValueError
+This error likely results from having surplus .jp2 images in the process directory. This can happen when a previous run was aborted before the clear_process_dir() function was run, or when the user has added files accidentally, because that can cause multiple files to be returned by the glob in the load_img_to_xr() function which should only return unique filenames. To resolve, clear the .jp2 files from the process directory and retry.
+
+### Black backgrounds in saved figures
+This code probably shouldn't be run in an interactive (e.g. ipython/jupyter) environment anyway, but in case it is used in this way it is worth noting that running the code in a jupyer interactive session in VSCode with the dark theme enabled will cause the saved figures to have black backgrounds, as the "dark theme" is persisted in preference to any mpl configurations set in the code. It is easy to avoid this by running the BISC_plot_figures.py script directly from the terminal (recommended), or using a different IDE (PyCharm works).
+
+### permission error in netcdf save
+This likely results from a path error, check that the folder structure on the machine running the code is consistent with that in this README.
+
 
 ## Contributions
 
-* Joseph Cook (University of Sheffield, University of Aberystwyth)
-* Andrew Tedstone (University of Bristol).
+### Authors
+* Joseph Cook (University of Aberystwyth)
+* Andrew Tedstone (University of Bristol)

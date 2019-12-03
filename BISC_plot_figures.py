@@ -140,4 +140,3 @@ for filename in filelist:
             if interactive_plotting == False:
                 plt.close() # prevent too many open figs in batches by closing plt between dates
 
-

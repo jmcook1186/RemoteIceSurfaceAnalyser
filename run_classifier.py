@@ -309,13 +309,13 @@ for tile in tiles:
                     result = np.reshape(np.array(result),(5490,5490))
                     resultxr = xr.DataArray(data=result,dims=['y','x'], coords={'x':s2xr.x, 'y':s2xr.y}).chunk(2000,2000)
                     resultxr = resultxr.where(mask2>0)
-                    resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + {tile} + f"MELT_{tile}_{date}.nc"))
+                    resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + f"/MELT_{tile}_{date}.nc"))
 
                     # flush memory
                     result = None
                     resultxr = None
 
-                    dataset['melt'] = xr.open_dataarray(str(os.environ['PROCESS_DIR'] + {tile} + f"MELT_{tile}_{date}.nc"))
+                    dataset['melt'] = xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + f"/MELT_{tile}_{date}.nc"))
 
 
 
