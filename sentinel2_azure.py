@@ -193,13 +193,13 @@ class AzureAccess:
 
 
         # download the files in the filtered list
-        for i in filtered_bloblist:
-            print(i)
-            try:
-                self.block_blob_service.get_blob_to_path(tile,
-                                             i, str(img_path+i[-38:-4]+'.jp2'))
-            except:
-                print("download failed {}".format(i))
+        # for i in filtered_bloblist:
+        #     print(i)
+        #     try:
+        #         self.block_blob_service.get_blob_to_path(tile,
+        #                                      i, str(img_path+i[-38:-4]+'.jp2'))
+        #     except:
+        #         print("download failed {}".format(i))
 
             # index to -38 because this is the filename without paths to folders etc
 

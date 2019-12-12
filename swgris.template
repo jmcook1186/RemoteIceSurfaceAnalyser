@@ -18,10 +18,12 @@ resolution=20
 savefigs=False
 ; retrieve snicar params
 retrieve_snicar_params=False
+; interpolate over cloudy pixels?
+interpolate_cloud=False
 ; interpolate to infill missing tiles
-interpolate_missing_tiles=False
+interpolate_missing_tiles=True
 ; run energy balance model to predict melt?
-calculate_melt=True
+calculate_melt=False
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).

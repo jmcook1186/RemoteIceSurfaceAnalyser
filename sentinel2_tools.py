@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import datetime as dt
 import matplotlib as mpl
 import configparser
+import pandas as pd
+from scipy import interpolate
 plt.ioff()
 
 # Get project configuration
@@ -286,7 +288,7 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
         print("SUFFICIENT GOOD PIXELS: PROCEEDING WITH IMAGE ANALYSIS \n")
 
     return QCflag, useable_area
-
+    
 
 def imageinterpolator(years, months, tile):
     """
@@ -328,6 +330,7 @@ def imageinterpolator(years, months, tile):
 
     # Now create list of DOYs and list of strings for all the "good" dates in the image repo
     # strip out the date from the filename and insert underscores to separate out YYYY, MM, DD so formats are consistent
+    # Note that the paths are different on the local and virtual machines, so the date srae in different positions
     for i in np.arange(0, len(DateList), 1):
 
         if config.get('options','VM')==True:

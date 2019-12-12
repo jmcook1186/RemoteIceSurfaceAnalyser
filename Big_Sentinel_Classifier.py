@@ -132,8 +132,8 @@ class SurfaceClassifier:
         """ Combine ice mask and cloud masks """
 
         mask2 = (S2vals.Icemask.values == 1)  \
-              & (S2vals.Data.sum(dim=self.NAME_bands) > 0) \
-              & (S2vals.Cloudmask.values == 0)
+            & (S2vals.Data.sum(dim=self.NAME_bands) > 0) \
+            & (S2vals.Cloudmask.values == 0)
 
         return mask2
 
@@ -149,11 +149,11 @@ class SurfaceClassifier:
         stacked = S2vals.Data.stack(allpoints=[self.NAME_y,self.NAME_x])
 
         # Transpose and rename so that DataArray has exactly the same layout/labels as the training DataArray.
-        # mask out nan areas not masked out by GIMP
         stackedT = stacked.T
         stackedT = stackedT.rename({'allpoints': 'samples'})
 
-        # copy LUT inpout values from config file
+        # copy LUT input values from config file (arrays of values for each model parameter - 
+        # used to reverse engineer the parameter values from LUT indexes later)
         side_lengths = confg.get('LUT','side_lengths')
         densities = confg.get('LUT','densities')
         dust = config.get('LUT','dust')
@@ -165,16 +165,16 @@ class SurfaceClassifier:
 
         # RECHUNK STACKEDT: choice of chunk size is crucial for maximising speed while preventing memory over-allocation.
         # While 20000 seems small there are very large intermediate arrays spawned by the compute() function.
-
+        # chunks >~20000 give memory error due to size of intermediate arrays 
         stackedT = stackedT.chunk(20000,9)
 
-        # reformat LUT: flatten to 2D array with column per combination of RT params, row per wavelength
+        # reformat LUT: flatten LUT from 3D to 2D array with one column per combination of RT params, one row per wavelength
         LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
         array = []
 
-        # find most similar SNICAR spectrum for each pixel
+        # find most similar LUT spectrum for each pixel in S2 image
         # astype(float 16) to reduce memory allocation (default was float64)
-        LUT = LUT[:,idx] # reduce wavelengths to match sample spectrum
+        LUT = LUT[:,idx] # reduce wavelengths to only the 9 that match the S2 image
         LUT = xr.DataArray(LUT,dims=('spectrum','bands')).astype(np.float16)
         error_array = LUT-stackedT.astype(np.float16) # subtract reflectance from snicar reflectance pixelwise
 
@@ -182,7 +182,7 @@ class SurfaceClassifier:
         idx_array = xr.apply_ufunc(abs,error_array,dask='allowed').mean(dim='bands').argmin(dim='spectrum') 
         idx_array.compute() # compute delayed product from transformation in previous line
 
-        # unravel index computes the index in the original n-dimeniona LUT from the index in the flattened LUT 
+        # unravel index computes the index in the original 3-D LUT from the index in the flattened 2D LUT 
         param_array = np.array(np.unravel_index(idx_array,[len(side_lengths),len(densities),len(dust),len(algae)]))
 
         # flush disk
@@ -191,8 +191,8 @@ class SurfaceClassifier:
         LUT = None
 
         #use the indexes to retrieve the actual parameter values for each pixel from the LUT indexes
-        # since the values are equal for all layers (side_lengths and density) or only the top layer (LAPs)
-        # only the first value from the parameeter arrays are taken.
+        # since the values are assumed equal in all vertical layers (side_lengths and density) or only the top layer (LAPs)
+        # only the first value from the parameter arrays is needed.
 
         counter = 0
 
@@ -208,6 +208,12 @@ class SurfaceClassifier:
             # reshape to original dims, add metadata, convert to xr DataArray, apply mask
             result_array = result_array.reshape(int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT))))
             resultxr = xr.DataArray(data=result_array,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
+            
+            # if toggled, interpolate over cloudy pixels using cubic method
+            if config.get('options','interpolate_cloud')=='True':
+                resultxr = resultxr.where(S2vals.Cloudmask == 1, np.nan)
+                resultxr = resultxr.interpolate_na(method='cubic')
+
             resultxr = resultxr.where(mask2>0)
 
             # PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
@@ -373,7 +379,7 @@ class SurfaceClassifier:
     def LAP_report(self, tile, date, savepath):
         """  
 
-        Report summary stats for dus and algae 
+        Report summary stats for dust and algae 
 
         """
 

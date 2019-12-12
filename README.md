@@ -1,5 +1,6 @@
-# BigIceSurfClassifier
-this repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on fiels spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as csv files for each tile/date.
+# Big Ice Surf Classifier
+
+This repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on fiels spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as csv files for each tile/date.
 
 ## Setup
 
@@ -10,8 +11,7 @@ The computational requirements of this script vary depending upon which function
 The environment can be set up manually using the following commands:
 
     conda create -n IceSurfClassifier -c conda-forge python ipython xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
-    conda activate azure
-    pip install azure-storage-blob sklearn-xarray sentinelsat
+    pip install azure sklearn-xarray sentinelsat dask[complete]
 
 or alternatively the environment can be built from environment.yaml using:
 
@@ -51,7 +51,11 @@ With a shell script created to set these environment variables, execute `source 
 ### Template
 
 The user-defined variable values are all defined in a template file (e.g.  `swgris.template`). This is where the main script grabs values to configure the image downloading, processing, classification and reporting.
+
 The user should enter their desired values into the template file prior to running the classifier. Multiple templates can be saved and called along with the classifier.
+
+Note that the LUT parameters are included in the template file. These MUST be identical to the parameters used to generate the LUT used in the snicar inversion, else the retrieval will grab the wrong values. Unless the user has generated a new LUT, this should NOT be changed.
+
 
 ### Directory Structure
 
@@ -135,6 +139,9 @@ There is an option in the template file to retrieve snicar parameters. If this i
 
 Note that despite the LUT approach, the snicar retrieval is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure D64_v3s Linux Data Science Machine with 64 cores to distribute the processing, which enables the retrieval function to complete in 53 minutes per tile. Testing on a single S2 tile on JC's laptop (i7-7700 GHz processor, 8 cores, 32GB RAM) was aborted after 10 hours. Increasing the size of the LUT increases the computation time significantly. Currently the LUT comprises 2058 individual snicar runs, produced by running snicar with all possible combinations of 6 grain sizes, 7 densities, 7 dust concentrations and 7 algal concentrations. 
 
+### Missing pixel interpolation
+Images where pixels have been masked out using the CloudMask (the sensivity of which is controlled by the user-defined variable cloudCoverThreshold) can have those pixels infilled using linear interpolation by toggling the "interpolate_cloud" option in the template. This simple function is applied to the dataarrays before they are masked and collated into the dataset that is then saved to netcdf as a model output.
+
 ### Missing date interpolation
 
 There is an option to toggle interpolation on/off. If interpolation is toggled on, the script will use pixel-wise linear interpolation to generate synthetic datasets for each missing date in the time series. Dates may be missing from the time series sue to a lack of overpass or a data quality issue such as excessive cloud cover. The interpolation function identifies these missing tiles, then identifies the most recent and nearest future dates where a valid dataset was acquired. It then applies a point-to-point linear regression between the values in each pixel in the past image and the corresponding pixel in the future image. The pixel values are then predicted using the regression equation for the missing dates. Recommend also scanning through the images manually after interpolation because occasionally interpolating pixels that were cloud-free in the past and cloudy in the future or vice versa can lead to unrealistic interpolation results. Anomalous dates should be manually discarded or alternatively the interpoaltion function could be run as a standalone with "good" past and future tiles manually selected.
@@ -144,6 +151,8 @@ There is an option to toggle interpolation on/off. If interpolation is toggled o
 There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 12 mins on 64 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
 
 ## Troubleshooting
+
+Here are some of the possible exceptions, errors and gotchas that could be encountered when running this code, and their solutions.
 
 ### Azure and SentinelHub
 The user must have their own Azure account with blob storage access. The scripts here manage the creation of storage blobs and i/o to and from them, but this relies upon the user having a valid account name and access key saved in an external file ".azure_secret" in the process directory. The same is true of the copernicus science hub - the user must have a valid username and password stored in an external file ".cscihub_secret" saved in the process directory to enable batch downloads of Sentinel-2 images that are not already saved in blob storage.
@@ -156,6 +165,13 @@ This code probably shouldn't be run in an interactive (e.g. ipython/jupyter) env
 
 ### permission error in netcdf save
 This likely results from a path error, check that the folder structure on the machine running the code is consistent with that in this README.
+
+### ... config.read_file(open(sys.argv[1])) IndexError: list index out of range
+This error most likely indicates that run_classifier.py is being run from the terminal wihout specifying the .template file or that there is a problem with the .template file. Perhaps the template file name has been typed incorrectly.
+
+
+## Developemnt notes
+To test a full run without downloading files from blob, comment out lines 196 - 202 in sentinel2_azure.py. This prevents the call to download the files from blob and will simply run the function on the files already present in the process_dir. Obviously this only works for single tiles and will not iterate over multiple tiles. Might be a good idea to start a devlopemnt version that retrieves tiles locally instead of from blob storage to help speed up testing.
 
 
 ## Contributions
