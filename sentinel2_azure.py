@@ -1,7 +1,6 @@
 """
 Functions for working with Sentinel-2 data stored in the Microsoft Azure
 Block-Blob service.
-
 """
 
 from collections import OrderedDict
@@ -13,16 +12,14 @@ import os
 import shutil
 import fnmatch
 import glob
+import gc
 
 
 class AzureAccess:
 
-
-
     _acc_name = None
     _acc_key = None
     block_blob_service = None
-
 
 
     def __init__(self, acc_name, acc_key):
@@ -43,7 +40,6 @@ class AzureAccess:
         """
         Function uploads processed L2A products to blob storage. Check if container matching tile name already exists -if so
         add files to that container, if not, create new container with name = tile.
-
         :param blob_account_name:
         :param blob_account_key:
         :param tile:
@@ -153,6 +149,58 @@ class AzureAccess:
         return upload_status
 
 
+    def dataset_to_blob(self, path_to_ds, delete_local_nc=True):
+    """
+    This function is for uploading the output spatial datasets to blob storage and deleting them from local storage.
+    This was introduced because running averything locally was using up all avaolable disk space on the VM.
+
+    """        
+
+        print("\nUploading netCDF to blob storage\n")
+        container_name = 'bisc-outputs/' #name of container in blob store to collect datasets into
+
+        # get list of existing containers
+        existing_containers = self.block_blob_service.list_containers()
+        existing_container_names = []
+
+        for item in existing_containers:
+            existing_container_names.append(item.name)
+
+        # check to see if the bisc-outputs blob container already exists
+        if any(container_name in p for p in existing_container_names):
+            print('\n',' CONTAINER {} ALREADY EXISTS IN STORAGE ACCOUNT '.format(tile))
+
+        else:
+            # if container does not exist, create it
+            print('container doesnot exist, now creating it\n')
+            self.block_blob_service.create_container(container_name)
+        
+        # with container created send all files in the "interpolated" subdirectory to the blob
+        for file in os.listdir(path_to_ds):
+            if file != 'interpolated':
+                self.block_blob_service.create_blob_from_path(container_name, file, os.path.join(path_to_ds,file))
+                print("Uploading {}".format(file))
+
+        # if toggled, delete the uploaded files from the local storage
+        if delete_local_nc == True:
+            
+            files = os.listdir(path_to_ds)
+
+            for f in files:
+                if f != 'interpolated': #do not delete the subdirectory itself, just the files inside
+                    try:
+                        os.remove(str(path_to_ds + f))
+                    except:
+                        print("did not delete {}".format(f))
+                
+                # explicitly call garbage collector to deallocate memory
+                print("GARGABE COLLECTION\n")
+                gc.collect()
+            
+
+        return
+
+
 
     def download_imgs_by_date(self, tile, date, img_path):
 
@@ -176,7 +224,6 @@ class AzureAccess:
         :return download_flag: Boolean, if True then problem with download, files skipped
         """
 
-
         # setup list
         bloblist = []
         download_flag = False
@@ -193,13 +240,13 @@ class AzureAccess:
 
 
         # download the files in the filtered list
-        # for i in filtered_bloblist:
-        #     print(i)
-        #     try:
-        #         self.block_blob_service.get_blob_to_path(tile,
-        #                                      i, str(img_path+i[-38:-4]+'.jp2'))
-        #     except:
-        #         print("download failed {}".format(i))
+        for i in filtered_bloblist:
+            print(i)
+            try:
+                self.block_blob_service.get_blob_to_path(tile,
+                                             i, str(img_path+i[-38:-4]+'.jp2'))
+            except:
+                print("download failed {}".format(i))
 
             # index to -38 because this is the filename without paths to folders etc
 
@@ -219,4 +266,3 @@ class AzureAccess:
         # relevant files now downloaded from blob and stored in the savepath folder
 
         return filtered_bloblist, download_flag
-

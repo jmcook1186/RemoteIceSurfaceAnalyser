@@ -17,6 +17,7 @@ import matplotlib as mpl
 import configparser
 import pandas as pd
 from scipy import interpolate
+import sentinel2_azure
 plt.ioff()
 
 # Get project configuration
@@ -333,8 +334,8 @@ def imageinterpolator(years, months, tile):
     # Note that the paths are different on the local and virtual machines, so the date srae in different positions
     for i in np.arange(0, len(DateList), 1):
 
-        if config.get('options','VM')==True:
-            DateList[i] = DateList[i][79:-33]
+        if config.get('options','vm')=='True':
+            DateList[i] = DateList[i][79:-34]
             DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
                                                                             6:8])  # format string to match format defined above
             DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
@@ -358,9 +359,9 @@ def imageinterpolator(years, months, tile):
 
         print(f"\nGenerating data for DOY {Missing}")
         # for each missing date find the nearest past and future "good" images in the repo
-        test = DOYlist - Missing  # subtract the missing DOY from each DOY in the image repo
-        closestPast = DOYlist[np.where(test < 0, test, -9999).argmax()]  # find the closest image from the past
-        closestFuture = DOYlist[np.where(test > 0, test, 9999).argmin()]  # find the closest image in the future
+        temp = DOYlist - Missing  # subtract the missing DOY from each DOY in the image repo
+        closestPast = DOYlist[np.where(temp < 0, temp, -9999).argmax()]  # find the closest image from the past
+        closestFuture = DOYlist[np.where(temp > 0, temp, 9999).argmin()]  # find the closest image in the future
 
 
         closestPastString = dt.datetime.strptime(str(year[2:4] + str(closestPast)),
@@ -426,15 +427,18 @@ def imageinterpolator(years, months, tile):
                         newClassImage = np.ma.array(newClassImage, mask=combinedMask)
                         newClassImage = newClassImage.filled(np.nan)
 
+
                         newClassImagexr = xr.DataArray(newClassImage)
+                        newClassImage = None
                         newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'), mode='w')
                         newClassImagexr = None
-
 
                     else:
                         slopes = (i - j) / (closestFuture - closestPast)
                         intercepts = i - (slopes * closestPast)
                         newImage = slopes * Missing + intercepts
+                        slopes = None
+                        intercepts = None
 
                         # apply mask to synthetic images
                         newImage = np.ma.array(newImage, mask=combinedMask)
@@ -446,31 +450,29 @@ def imageinterpolator(years, months, tile):
                         newImagexr = xr.DataArray(newImage)
                         newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'), mode='w')
                         newImagexr = None
-                        counter +=1
-                        # newImage = None # flush disk
-                    
+                        counter +=1                   
 
-                albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
-                surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
-                grain = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc'))
-                density = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc'))
-                dust = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dust.nc'))
-                algae = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc'))
+                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc')) as albedo:
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc')) as surfclass:
+                        with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc')) as grain:
+                            with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc')) as density:
+                                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dust.nc')) as dust:
+                                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc')) as algae:
 
-                # collate data into xarray dataset and copy metadata from PAST
-                newXR = xr.Dataset({
-                    'classified': (['x', 'y'], surfclass.values),
-                    'albedo': (['x', 'y'], albedo.values),
-                    'grain_size': (['x', 'y'], grain.values),
-                    'density': (['x', 'y'], density.values),
-                    'dust': (['x', 'y'], dust.values),
-                    'algae': (['x', 'y'], algae.values),
-                    'Icemask': (['x', 'y'], imagePast.Icemask),
-                    'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                    'FinalMask': (['x', 'y'], combinedMask),
-                    'longitude': (['x', 'y'], imagePast.longitude),
-                    'latitude': (['x', 'y'], imagePast.latitude)
-                }, coords = {'x': imagePast.x, 'y': imagePast.y})
+                                        # collate data into xarray dataset and copy metadata from PAST
+                                        newXR = xr.Dataset({
+                                            'classified': (['x', 'y'], surfclass.values),
+                                            'albedo': (['x', 'y'], albedo.values),
+                                            'grain_size': (['x', 'y'], grain.values),
+                                            'density': (['x', 'y'], density.values),
+                                            'dust': (['x', 'y'], dust.values),
+                                            'algae': (['x', 'y'], algae.values),
+                                            'Icemask': (['x', 'y'], imagePast.Icemask),
+                                            'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                                            'FinalMask': (['x', 'y'], combinedMask),
+                                            'longitude': (['x', 'y'], imagePast.longitude),
+                                            'latitude': (['x', 'y'], imagePast.latitude)
+                                        }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
 
             else: # if snicar retrieval toggled off
@@ -478,8 +480,7 @@ def imageinterpolator(years, months, tile):
                 # extract the past and future albedo and classified layers.
                 albPast = imagePast.albedo.values
                 albFuture = imageFuture.albedo.values
-                classPast = imagePast.classified.values
-                classFuture = imageFuture.classified.values
+
 
                 # create mask
                 maskPast = np.isnan(albPast)
@@ -488,6 +489,9 @@ def imageinterpolator(years, months, tile):
 
                 filenames = ['albedo','class']
                 counter = 0
+
+                classPast = imagePast.classified.values
+                classFuture = imageFuture.classified.values
 
                 # loop through params calculating linear regression
                 for i,j in [(albPast,albFuture),(classPast,classFuture)]:
@@ -498,13 +502,16 @@ def imageinterpolator(years, months, tile):
                         albedoDiffs = albPast - albFuture
                         albedoDiffs = albedoDiffs*0.5
                         albedoDiffsPredicted = albPast - newImage
-
                         newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, classFuture, classPast)
+                        classPast = None
+                        classFuture = None
                         newClassImage = np.ma.array(newClassImage, mask=combinedMask)
                         newClassImage = newClassImage.filled(np.nan)
                         newClassImagexr = xr.DataArray(newClassImage)
+                        newClassImage = None
                         newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
                         newClassImagexr = None
+
                     
                     else:
                         slopes = (i - j) / (closestFuture - closestPast)
@@ -538,36 +545,26 @@ def imageinterpolator(years, months, tile):
                 }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
 
-            # save synthetic image in same format in same directory as original "good" images
-            newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
-            print("\nDataset saved")
+                albedo = None
+                surfClass = None
 
-            files = glob.glob(str(os.environ['PROCESS_DIR'] +'interpolated_'+'*.nc'))
-            for f in files:
-                os.remove(f)
+                files = glob.glob(str(os.environ['PROCESS_DIR'] + 'interpolated_' + '*.nc'))
+                for f in files:
+                    os.remove(f)
 
+            # save synthetic image in same format in sub directory as original "good" images
+            newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/interpolated/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
+            print("Interpolated dataset saved locally")
             
+            print("Connecting to blob")
+            azure_cred = configparser.ConfigParser()
+            azure_cred.read_file(open(os.environ['AZURE_SECRET']))
+            azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
+                                    azure_cred.get('account', 'key'))
 
-            if config.get('options','savefigs')=='True':
-
-                # generate figures
-                cmap1 = mpl.colors.ListedColormap(
-                    ['white', 'royalblue', 'black', 'lightskyblue', 'mediumseagreen', 'darkgreen'])
-                cmap1.set_under(color='white')  # make sure background is white
-                cmap2 = plt.get_cmap('Greys_r')  # reverse greyscale for albedo
-                cmap2.set_under(color='white')  # make sure background is white
-
-                plt.figure(1,figsize=(10,8))
-                plt.title(
-                    'Greenland Ice Sheet from Sentinel 2 classified using Random Forest Classifier (top) and albedo (bottom)')
-                plt.subplot(211)
-                plt.imshow(newXR.classified.values, vmin=1, vmax=6, cmap=cmap1),plt.colorbar()
-                plt.subplot(212)
-                plt.imshow(newXR.albedo.values, vmin=0,vmax=1, cmap=cmap2),plt.colorbar()
-
-                plt.tight_layout()
-                plt.savefig(str(os.environ['PROCESS_DIR'] + "/outputs/22wev/{}_{}_Classified_Albedo.png".format(tile, MissingDateString)), dpi=100)
-                plt.close()
+            # send dataset to azure storage blob and delet the local copy to save disk space
+            print("Sending dataset to blob storage and deleting local copy")
+            azure.dataset_to_blob(str(os.environ["PROCESS_DIR"] + "/outputs/{}/interpolated/".format(tile)), delete_local_nc=True)
 
             newXR = None
 

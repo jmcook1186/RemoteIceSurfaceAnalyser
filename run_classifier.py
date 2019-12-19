@@ -44,6 +44,7 @@ import sentinel2_azure
 import Big_Sentinel_Classifier
 import xr_cf_conventions
 import multiprocessing as mp
+import gc
 
 ###################################################################################
 ######## DEFINE BLOB ACCESS, GLOBAL VARIABLES AND SET UP EMPTY LISTS/ARRAYS #######
@@ -123,6 +124,7 @@ for tile in tiles:
     
     # first create directory to save outputs to
     dirName = str(os.environ['PROCESS_DIR'] + '/outputs/' + tile + "/")
+    subdirName = str(os.environ['PROCESS_DIR'] + '/outputs/' + tile + "/" + "interpolated")
 
     # Create target Directory if it doesn't already exist
     if not os.path.exists(dirName):
@@ -130,6 +132,14 @@ for tile in tiles:
         print("Directory ", dirName, " Created ")
     else:
         print("Directory ", dirName, " already exists")
+
+        
+    # Create target subdirectory if it doesn't already exist
+    if not os.path.exists(subdirName):
+        os.mkdir(subdirName)
+        print("Directory ", subdirName, " Created ")
+    else:
+        print("Directory ", subdirName, " already exists")
 
     # make DirName the path to save files to
     savepath = dirName
@@ -299,6 +309,7 @@ for tile in tiles:
 
   
                 # run pixelwise energy balance model
+                
                 if config.get('options','calculate_melt')=='True':
                     print("\nRUNNING EB MODEL\n")
                     n_cpus = mp.cpu_count()
@@ -334,7 +345,7 @@ for tile in tiles:
                                                          config.get('netcdf', 'title'))
 
                 dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
-
+                
                 # flush dataset from disk
                 dataset = None
                 predicted = None
@@ -343,11 +354,15 @@ for tile in tiles:
                 dust = None
                 algae = None
 
+                # explicitly call garbage collector to deallocate memory
+                print("GARGABE COLLECTION\n")
+                gc.collect()
+                
                 # generate summary data
-                summaryDF = bsc.albedo_report(tile, date, savepath)
+                # ssummaryDF = bsc.albedo_report(tile, date, savepath)
         
         # clear process directory 
-  #      sentinel2_tools.clear_img_directory(os.environ['PROCESS_DIR'])
+        sentinel2_tools.clear_img_directory(os.environ['PROCESS_DIR'])
 
     # interpolate missing tiles if toggled ON
     if config.get('options','interpolate_missing_tiles')=='True':
@@ -356,7 +371,11 @@ for tile in tiles:
 
     # collate individual dates into single dataset for each tile 
     print("\nCOLLATING INDIVIDUAL TILES INTO FINAL DATASET")
-    concat_dataset = bsc.concat_all_dates(savepath, tile)
+
+    #concat_dataset = bsc.concat_all_dates(savepath, tile)
+
+    # send dataset to azure blob storage and delete from local storage
+    azure.dataset_to_blob(str(os.environ['PROCESS_DIR']+'outputs/'+ tile + '/'), delete_local_nc=True)
 
     # save logs to csv files
     print("\n SAVING QC LOGS TO TXT FILES")
@@ -366,4 +385,3 @@ for tile in tiles:
 
 print()
 print("\nCOMPLETED RUN")
-
