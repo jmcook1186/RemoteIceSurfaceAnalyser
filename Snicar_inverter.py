@@ -23,6 +23,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr
+import dask
+import os
 
 ##############################################################################
 # READ S2 IMAGE
@@ -58,35 +60,44 @@ def invert_snicar(S2xr):
 
     # RECHUNK STACKEDT: choice of chunk size is crucial for maximising speed while preventing memory over-allocation.
     # While 20000 seems small there are very large intermediate arrays spawned by the compute() function.
-    # The compute() function takes almost a day to run on an 8 core i7-7000 GHz processor with 32GB RAM. 
+    # The compute() function takes almost a day to run on an 8 core i7-7000 GHz processor with 32GB RAM.
     # Takes 58 mins on 64 core Azure VM.
 
     stackedT = stackedT.chunk(20000,9)
     stackedT = stackedT[1000000:1250000]
 
     # reformat LUT: flatten to 2D array with column per combination of RT params, row per wavelength
-    dirtyLUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
-    array = []
+    dirtyLUT = np.load(str('/home/joe/Code/BigIceSurfClassifier/Process_Dir/' + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
 
     # find most similar SNICAR spectrum for each pixel
     # astype(float 16) to reduce memory allocation (default was float64)
     dirtyLUT = dirtyLUT[:,idx] # reduce wavelengths to match sample spectrum
     dirtyLUT = xr.DataArray(dirtyLUT,dims=('spectrum','bands')).astype(np.float16)
-    error_array = dirtyLUT-stackedT.astype(np.float16) # subtract reflectance from snicar reflectance pixelwise
+
+    error_array = dirtyLUT - stackedT.astype(np.float16)  # subtract reflectance from snicar reflectance pixelwise
+    idx_array = xr.apply_ufunc(abs,error_array,dask='allowed')
+    idx_array = xr.apply_ufunc(np.mean,idx_array,input_core_dims=[['bands']],dask='allowed',kwargs={'axis':-1})
+    idx_array = xr.apply_ufunc(np.argmin,idx_array,input_core_dims=[['spectrum']],dask='allowed',kwargs={'axis':-1})
 
     # average error over bands, then provide index of minimum error (index refers to position in flattened LUT for closest matching spectrum)
-    idx_array = xr.apply_ufunc(abs,error_array,dask='allowed').mean(dim='bands').argmin(dim='spectrum') 
-    idx_array.compute() # compute delayed product from transformation in previous line
+    # idx_array = xr.apply_ufunc(abs,error_array,dask='allowed').mean(dim='bands').argmin(dim='spectrum')
+    # idx_array.compute() # compute delayed product from transformation in previous line
 
-    # unravel index computes the index in the original n-dimeniona LUT from the index in the flattened LUT 
-    param_array = np.array(np.unravel_index(idx_array,[len(side_lengths),len(densities),len(dust),len(algae)]))
+    # unravel index computes the index in the original n-dimeniona LUT from the index in the flattened LUT
+    @dask.delayed
+    def unravel(idx_array,side_lengths,densities,dust,algae):
+        param_array = np.array(np.unravel_index(idx_array,[len(side_lengths),len(densities),len(dust),len(algae)]))
+        return param_array
+
+    param_array = unravel(idx_array,side_lengths,densities,dust,algae)
+    out = param_array.compute()
 
     # flush disk
     idx_array = None
     error_array = None
     dirtyLUT = None
-
-    #use the indexes to retrieve the actual parameter values for each pixel from the LUT indexes
+  
+    # use the indexes to retrieve the actual parameter values for each pixel from the LUT indexes
     # since the values are equal for all layers (side_lengths and density) or only the top layer (LAPs)
     # only the first value from the parameeter arrays are taken.
 
@@ -98,11 +109,11 @@ def invert_snicar(S2xr):
                 result_array = np.where(param_array[counter]==i, param[i][0], param_array[counter])
             else:
                 result_array = np.where(param_array[counter]==i, param[i][0], result_array)
-
+    
         result_array = result_array.reshape([int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT)))])
         resultxr = xr.DataArray(result_array)
         result_array = None
-        resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
+        resultxr.to_netcdf(str('/home/joe/Code/BigIceSurfClassifier/Process_Dir/' + f"{param_names[counter]}.nc"))
         resultxr = None
         counter +=1
 
@@ -123,7 +134,6 @@ def format_retrieved_params(S2xr):
         'dust': (['x', 'y'], dust.values),
         'algae': (['x', 'y'], algae.values)},
         coords={'x': S2xr.x, 'y': S2xr.y})
-
 
     return dataset
 

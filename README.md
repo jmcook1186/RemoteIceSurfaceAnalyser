@@ -94,6 +94,11 @@ Big Ice Surf Classifier
 |               |
 |              Tile
 |               |
+|               |---interpolated
+|               |        |
+|               |        |will be populated temporarily with "synthetic" 
+|               |        |interpolated images before being uploaded to blob storage
+|               |
 |               |---To be populated with output data
 |
 |

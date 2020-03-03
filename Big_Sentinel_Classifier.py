@@ -170,25 +170,32 @@ class SurfaceClassifier:
 
         # reformat LUT: flatten LUT from 3D to 2D array with one column per combination of RT params, one row per wavelength
         LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
-        array = []
 
         # find most similar LUT spectrum for each pixel in S2 image
         # astype(float 16) to reduce memory allocation (default was float64)
         LUT = LUT[:,idx] # reduce wavelengths to only the 9 that match the S2 image
+
         LUT = xr.DataArray(LUT,dims=('spectrum','bands')).astype(np.float16)
-        error_array = LUT-stackedT.astype(np.float16) # subtract reflectance from snicar reflectance pixelwise
 
-        # average error over bands, then provide index of minimum error (index refers to position in flattened LUT for closest matching spectrum)
-        idx_array = xr.apply_ufunc(abs,error_array,dask='allowed').mean(dim='bands').argmin(dim='spectrum') 
-        idx_array.compute() # compute delayed product from transformation in previous line
+        error_array = LUT - stackedT.astype(np.float16)  # subtract reflectance from snicar reflectance pixelwise
+        idx_array = xr.apply_ufunc(abs,error_array,dask='allowed')
+        idx_array = xr.apply_ufunc(np.mean,idx_array,input_core_dims=[['bands']],dask='allowed',kwargs={'axis':-1})
+        idx_array = xr.apply_ufunc(np.argmin,idx_array,input_core_dims=[['spectrum']],dask='allowed',kwargs={'axis':-1})
 
-        # unravel index computes the index in the original 3-D LUT from the index in the flattened 2D LUT 
-        param_array = np.array(np.unravel_index(idx_array,[len(side_lengths),len(densities),len(dust),len(algae)]))
+
+        # unravel index computes the index in the original n-dimeniona LUT from the index in the flattened LUT
+        @dask.delayed
+        def unravel(idx_array,side_lengths,densities,dust,algae):
+            param_array = np.array(np.unravel_index(idx_array,[len(side_lengths),len(densities),len(dust),len(algae)]))
+            return param_array
+
+        param_array = unravel(idx_array,side_lengths,densities,dust,algae)
+        out = param_array.compute()
 
         # flush disk
         idx_array = None
         error_array = None
-        LUT = None
+        dirtyLUT = None
 
         #use the indexes to retrieve the actual parameter values for each pixel from the LUT indexes
         # since the values are assumed equal in all vertical layers (side_lengths and density) or only the top layer (LAPs)
