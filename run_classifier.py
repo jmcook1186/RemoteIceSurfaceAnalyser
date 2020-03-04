@@ -74,14 +74,15 @@ dates = []
 print("WRITING PARAMS TO LOG FILE\n")
 text_file = open("BISC_Param_Log.txt", "w")
 text_file.write("PARAMS FOR BIG ICE SURF CLASSIFIER\n\n")
-text_file.write(f"DATE/TIME (yyyy,mm,dd,hh,mm,ss) = {dt.datetime.now()}\n")
-text_file.write(f"SNICAR CONFIG = {config.get('options','retrieve_snicar_params')}\n")
-text_file.write(f"INTERPOLATION CONFIG = {config.get('options','interpolate_missing_tiles')}\n")
-text_file.write(f"ENERGY_BALANCE CONFIG = {config.get('options','calculate_melt')}\n")
-text_file.write(f"Thresholds: Cloud cover= {config.get('thresholds','cloudCoverThresh')}, \nIce Area = {config.get('thresholds','minArea')}\n")
-text_file.write(f"TILES: {config.get('options','tiles')}\n")
-text_file.write(f"YEARS: {config.get('options','years')}\n")
-text_file.write(f"MONTHS: {config.get('options','months')}\n")
+text_file.write("DATE/TIME (yyyy,mm,dd,hh,mm,ss) = {}\n".format(dt.datetime.now()))
+text_file.write("SNICAR CONFIG = {}\n".format(config.get('options','retrieve_snicar_params')))
+text_file.write("INTERPOLATION CONFIG = {}\n".format(config.get('options','interpolate_missing_tiles')))
+text_file.write("ENERGY_BALANCE CONFIG = {}\n".format(config.get('options','calculate_melt')))
+text_file.write("Thresholds: Cloud cover= {}, \nIce Area = {}\n".format(config.get('thresholds',
+    'cloudCoverThresh'),config.get('thresholds','minArea')))
+text_file.write("TILES: {}\n".format(config.get('options','tiles')))
+text_file.write("YEARS: {}\n".format(config.get('options','years')))
+text_file.write("MONTHS: {}\n".format(config.get('options','months')))
 text_file.close()
 
 print("RUNNING WITH THE FOLLOWING CONFIGURATION:")
@@ -145,7 +146,7 @@ for tile in tiles:
     savepath = dirName
 
     for date in dates:
-        print(f"\n DOWNLOADING FILES: {tile} {date}\n")
+        print("\n DOWNLOADING FILES: {} {}\n.format(tile,date")
 
         # query blob for files in tile and date range
         filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
@@ -154,7 +155,7 @@ for tile in tiles:
         # check download and only proceed if correct no. of files and cloud layer present
 
         if download_flag:
-            print(f"\nDOWNLOAD FLAG : Skipping {tile}, {date} ")
+            print("\nDOWNLOAD FLAG : Skipping {}, {} ".format(tile,date))
             download_problem_list.append('{}_{}'.format(tile, date))
 
 
@@ -175,13 +176,13 @@ for tile in tiles:
             
             # Check image is not too cloudy. If OK, proceed, if not, skip tile/date
             if QCflag:
-                print(f"\n QC FlAG: Skipping {tile}, {date}: {np.round(useable_area,4)} % useable pixels")
-                QC_reject_list.append(f'{tile}_{date}_useable_area = {np.round(useable_area,2)}')
+                print("\n QC FlAG: Skipping {}, {}: {} % useable pixels".format(tile,date,np.round(useable_area,4)))
+                QC_reject_list.append('{}_{}_useable_area = {}'.format(tile,date,np.round(useable_area,2)))
 
 
 
             else:
-                print(f"\n NO FLAGS, proceeding with image analysis for {tile}, {date}")
+                print("\n NO FLAGS, proceeding with image analysis for {}, {}".format(tile,date))
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, np.round(useable_area,2)))
 
                 s2xr = bsc.load_img_to_xr(os.environ['PROCESS_DIR'],
@@ -208,7 +209,7 @@ for tile in tiles:
 
                 # 3) add predicted map array and add metadata
                 if config.get('options','interpolate_cloud')=='True':
-                    predicted = predicted.interpolate_na(dim='y',method='linear',use_coordinate=False)
+                    predicted = predicted.interpolate_na(dim='y',method='linear',use_coordinate=True)
                 predicted = predicted.fillna(0)
                 predicted = predicted.where(mask2 > 0)
                 predicted.encoding = {'dtype': 'int16', 'zlib': True, '_FillValue': -9999}
@@ -220,7 +221,7 @@ for tile in tiles:
 
                 # add albedo map array and add metadata
                 if config.get('options','interpolate_cloud')=='True':
-                    albedo = albedo.interpolate_na(dim='y',method='linear',use_coordinate=False)
+                    albedo = albedo.interpolate_na(dim='y',method='linear',use_coordinate=True)
                 albedo = albedo.fillna(0)
                 albedo = albedo.where(mask2 > 0)
                 albedo.encoding = {'dtype': 'int16', 'scale_factor': 0, 'zlib': True, '_FillValue': -9999}
@@ -236,7 +237,15 @@ for tile in tiles:
                     print("\n NOW RUNNING SNICAR INVERSION FUNCTION \n")
                     
                     # run snicar inversion
-                    bsc.invert_snicar(s2xr,mask2, predicted)
+                    side_lengths = [[3000,3000,3000,3000,3000],[5000,5000,5000,5000,5000],[7000,7000,7000,7000,7000],[9000,9000,9000,9000,9000],[12000,12000,12000,12000,12000],[15000,15000,15000,15000,15000]]
+                    densities = [[300,300,300,300,300],[400,400,400,400,400],[500,500,500,500,500],[600,600,600,600,600],[700,700,700,700,700],[800,800,800,800,800],[900,900,900,900,900]]
+                    dust = [[10000,0,0,0,0],[50000,0,0,0,0],[100000,0,0,0,0],[500000,0,0,0,0],[1000000,0,0,0,0],[1500000,0,0,0,0],[2000000,0,0,0,0]]
+                    algae = [[10000,0,0,0,0],[50000,0,0,0,0],[100000,0,0,0,0],[500000,0,0,0,0],[1000000,0,0,0,0],[1500000,0,0,0,0],[2000000,0,0,0,0]]
+                    wavelengths = np.arange(0.3,5,0.01)
+                    idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
+                    print("LUT length = ",len(side_lengths)*len(densities)*len(dust)*len(algae))
+                    
+                    bsc.invert_snicar(s2xr,mask2,predicted,side_lengths,densities,dust,algae,wavelengths,idx)
 
                     # Add metadata to retrieved snicar parameter arrays + mask
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
@@ -330,13 +339,13 @@ for tile in tiles:
                     result = np.reshape(np.array(result),(5490,5490))
                     resultxr = xr.DataArray(data=result,dims=['y','x'], coords={'x':s2xr.x, 'y':s2xr.y}).chunk(2000,2000)
                     resultxr = resultxr.where(mask2>0)
-                    resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + f"/MELT_{tile}_{date}.nc"))
+                    resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + "/MELT_{}_{}.nc".format(tile,date)))
 
                     # flush memory
                     result = None
                     resultxr = None
 
-                    dataset['melt'] = xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + f"/MELT_{tile}_{date}.nc"))
+                    dataset['melt'] = xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + "/MELT_{}_{}.nc".format(tile,date)))
 
 
                 # add geo info
@@ -355,9 +364,8 @@ for tile in tiles:
                 algae = None
 
                 # explicitly call garbage collector to deallocate memory
-                print("GARGABE COLLECTION\n")
+                print("GARBAGE COLLECTION\n")
                 gc.collect()
-                
                 # generate summary data
                 # ssummaryDF = bsc.albedo_report(tile, date, savepath)
         
@@ -371,10 +379,9 @@ for tile in tiles:
 
     # collate individual dates into single dataset for each tile 
     print("\nCOLLATING INDIVIDUAL TILES INTO FINAL DATASET")
-
     #concat_dataset = bsc.concat_all_dates(savepath, tile)
 
-    # send dataset to azure blob storage and delete from local storage
+    # send dataset to azure blob storage and delete from local storag
     azure.dataset_to_blob(str(os.environ['PROCESS_DIR']+'outputs/'+ tile + '/'), delete_local_nc=True)
 
     # save logs to csv files

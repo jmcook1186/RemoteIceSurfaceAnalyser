@@ -10,6 +10,7 @@ import ebmodel as ebm
 import ebmodel as ebm
 import glob
 import os
+import dask
 
 try:
     import joblib
@@ -138,13 +139,11 @@ class SurfaceClassifier:
         return mask2
 
 
-    def invert_snicar(self, S2vals, mask2, predicted):
-
+    def invert_snicar(self, S2vals, mask2, predictedxr, side_lengths, densities, dust, algae, wavelengths, idx):
         """
         Pixelwise retrieval of snicar RT params by matching spectra against snicar-generated LUT loaded from process_dir
-
         """
-
+        
         # stack the values into a 1D array
         stacked = S2vals.Data.stack(allpoints=[self.NAME_y,self.NAME_x])
 
@@ -152,24 +151,13 @@ class SurfaceClassifier:
         stackedT = stacked.T
         stackedT = stackedT.rename({'allpoints': 'samples'})
 
-        # copy LUT input values from config file (arrays of values for each model parameter - 
-        # used to reverse engineer the parameter values from LUT indexes later)
-        side_lengths = confg.get('LUT','side_lengths')
-        densities = confg.get('LUT','densities')
-        dust = config.get('LUT','dust')
-        algae = confg.get('LUT','algae')
-        wavelengths = np.arange(0.3,5,0.01)
-
-        # get indexes corresponding to S2 centre wavelengths
-        idx = config.get('LUT','idx')
-
         # RECHUNK STACKEDT: choice of chunk size is crucial for maximising speed while preventing memory over-allocation.
         # While 20000 seems small there are very large intermediate arrays spawned by the compute() function.
         # chunks >~20000 give memory error due to size of intermediate arrays 
         stackedT = stackedT.chunk(20000,9)
 
         # reformat LUT: flatten LUT from 3D to 2D array with one column per combination of RT params, one row per wavelength
-        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(len(side_lengths)*len(densities)*len(dust)*len(algae),len(wavelengths))
+        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(2058,len(wavelengths))
 
         # find most similar LUT spectrum for each pixel in S2 image
         # astype(float 16) to reduce memory allocation (default was float64)
@@ -190,8 +178,11 @@ class SurfaceClassifier:
             return param_array
 
         param_array = unravel(idx_array,side_lengths,densities,dust,algae)
-        out = param_array.compute()
+        param_array = np.array(param_array.compute())
 
+        print("param_array shape = ",param_array.shape)
+        print("param_array type = ",type(param_array))
+        
         # flush disk
         idx_array = None
         error_array = None
@@ -202,25 +193,24 @@ class SurfaceClassifier:
         # only the first value from the parameter arrays is needed.
 
         counter = 0
-
         param_names = ['side_lengths','densities','dust','algae']
         for param in [side_lengths, densities, dust, algae]:
 
             for i in np.arange(0,len(param),1):
+
                 if i ==0: # in first loop, pixels !=i should be replaced by param_array values, as result_array doesn't exist yet
+                    print("in loop i = 0")
+                    print(param_array[counter].shape)
+                    print(param[i][0])
                     result_array = np.where(param_array[counter]==i, param[i][0], param_array[counter])
                 else:
+                    print("in loop i = {}".format(i))
                     result_array = np.where(param_array[counter]==i, param[i][0], result_array)
 
             # reshape to original dims, add metadata, convert to xr DataArray, apply mask
             result_array = result_array.reshape(int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT))))
             resultxr = xr.DataArray(data=result_array,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
             
-            # if toggled, interpolate over cloudy pixels using cubic method
-            if config.get('options','interpolate_cloud')=='True':
-                resultxr = resultxr.where(S2vals.Cloudmask == 1, np.nan)
-                resultxr = resultxr.interpolate_na(method='cubic')
-
             resultxr = resultxr.where(mask2>0)
 
             # PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
@@ -229,13 +219,13 @@ class SurfaceClassifier:
             resultxr = resultxr.where(predictedxr=='SN',0)
 
             # send to netcdf and flush memory
-            resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ f"{param_names[counter]}.nc"))
+            resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ "{}.nc".format(param_names[counter])))
             
-            param_array = None
             result_array = None
             resultxr = None
             counter +=1
-
+            
+        param_array = None
         # retrieved params are saved as temporary netcdfs to the process_dir and then collated directly from 
         # file into the final dataset in run_classifier.py
 
@@ -289,7 +279,7 @@ class SurfaceClassifier:
 
         """
 
-        with xr.open_dataset(savepath + f"{tile}_{date}_Classification_and_Albedo_Data.nc",
+        with xr.open_dataset(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile,date),
                              chunks={'x': 2000, 'y': 2000}) as dataset:
 
 
