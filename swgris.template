@@ -7,7 +7,7 @@ tiles=["22WEV"]
 ; Years to process.
 years=[2016]
 ; Months to process.
-months=[7]
+months=[6]
 ; Name of pkl file (place the file in PROCESS_DIR).
 classifier=Sentinel2_classifier.pkl
 ; Name of icemask file (place in PROCESS_DIR).

@@ -199,24 +199,24 @@ class SurfaceClassifier:
             for i in np.arange(0,len(param),1):
 
                 if i ==0: # in first loop, pixels !=i should be replaced by param_array values, as result_array doesn't exist yet
-                    print("in loop i = 0")
-                    print(param_array[counter].shape)
-                    print(param[i][0])
+                    print("result_array gets values {}".format(param[i][0]))
                     result_array = np.where(param_array[counter]==i, param[i][0], param_array[counter])
+
                 else:
-                    print("in loop i = {}".format(i))
+                    print("result_array gets values {}".format(param[i][0]))
                     result_array = np.where(param_array[counter]==i, param[i][0], result_array)
 
             # reshape to original dims, add metadata, convert to xr DataArray, apply mask
             result_array = result_array.reshape(int(np.sqrt(len(stackedT))),int(np.sqrt(len(stackedT))))
             resultxr = xr.DataArray(data=result_array,dims=['y','x'], coords={'x':S2vals.x, 'y':S2vals.y}).chunk(2000,2000)
             
-            resultxr = resultxr.where(mask2>0)
+            print("PROCESSED RESULT ARRAY: \n")
+            print(resultxr.values)
 
             # PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
-            resultxr = resultxr.where(predictedxr=='WAT',0)
-            resultxr = resultxr.where(predictedxr=='CC',0)
-            resultxr = resultxr.where(predictedxr=='SN',0)
+            resultxr = resultxr.where(mask2>0)
+
+            print(result_array)
 
             # send to netcdf and flush memory
             resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ "{}.nc".format(param_names[counter])))
@@ -224,8 +224,8 @@ class SurfaceClassifier:
             result_array = None
             resultxr = None
             counter +=1
-            
-        param_array = None
+
+        
         # retrieved params are saved as temporary netcdfs to the process_dir and then collated directly from 
         # file into the final dataset in run_classifier.py
 

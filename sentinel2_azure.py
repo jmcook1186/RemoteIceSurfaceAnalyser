@@ -150,11 +150,11 @@ class AzureAccess:
 
 
     def dataset_to_blob(self, path_to_ds, delete_local_nc=True):
-    """
-    This function is for uploading the output spatial datasets to blob storage and deleting them from local storage.
-    This was introduced because running averything locally was using up all avaolable disk space on the VM.
+        """
+        This function is for uploading the output spatial datasets to blob storage and deleting them from local storage.
+        This was introduced because running averything locally was using up all avaolable disk space on the VM.
 
-    """        
+        """        
 
         print("\nUploading netCDF to blob storage\n")
         container_name = 'bisc-outputs/' #name of container in blob store to collect datasets into

@@ -327,13 +327,19 @@ for tile in tiles:
                     albedo = np.ravel(np.array(dataset.albedo.values))
                     albedo_chunks = np.array_split(albedo,n_cpus)
 
-                            # define function to be applied pixelwise (distributed using multiprocessing)
+                    lat = np.ravel(np.array(dataset.latitude))
+                    lat_chunks = np.array_split(lat,n_cpus)
+
+                    lon = np.ravel(np.array(dataset.longitude))
+                    lon_chunks = np.array_split(lon,n_cpus)
+
+                    # define function to be applied pixelwise (distributed using multiprocessing)
                     
                     with mp.Pool(processes=n_cpus) as pool:
 
                         # starts the sub-processes without blocking
                         # pass the chunk to each worker process
-                        result = pool.map(bsc.run_ebmodel,albedo)
+                        result = pool.map(bsc.run_ebmodel,albedo_chunks, lat_chunks, lon_chunks)
 
                     # reshape to original dims, convert to xr DataArray, apply mask and send to netcdf
                     result = np.reshape(np.array(result),(5490,5490))
@@ -381,7 +387,7 @@ for tile in tiles:
     print("\nCOLLATING INDIVIDUAL TILES INTO FINAL DATASET")
     #concat_dataset = bsc.concat_all_dates(savepath, tile)
 
-    # send dataset to azure blob storage and delete from local storag
+    # send dataset to azure blob storage and delete from local storage
     azure.dataset_to_blob(str(os.environ['PROCESS_DIR']+'outputs/'+ tile + '/'), delete_local_nc=True)
 
     # save logs to csv files

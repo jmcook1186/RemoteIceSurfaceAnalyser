@@ -410,6 +410,7 @@ def imageinterpolator(years, months, tile):
 
                 filenames = ['albedo','class','grain', 'density', 'dust', 'algae']
                 counter = 0
+                
                 # loop through params calculating linear regression
                 for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(dustPast,dustFuture),(algaePast,algaeFuture)]:                 
 
@@ -530,23 +531,20 @@ def imageinterpolator(years, months, tile):
                         counter +=1
 
 
-                albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
-                surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
+                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc')) as albedo:
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc')) as surfClass:
 
-                # collate data into xarray dataset and copy metadata from PAST
-                newXR = xr.Dataset({
-                    'classified': (['x', 'y'], surfclass.values),
-                    'albedo': (['x', 'y'], albedo.values),
-                    'Icemask': (['x', 'y'], imagePast.Icemask),
-                    'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                    'FinalMask': (['x', 'y'], combinedMask),
-                    'longitude': (['x', 'y'], imagePast.longitude),
-                    'latitude': (['x', 'y'], imagePast.latitude)
-                }, coords = {'x': imagePast.x, 'y': imagePast.y})
+                        # collate data into xarray dataset and copy metadata from PAST
+                        newXR = xr.Dataset({
+                            'classified': (['x', 'y'], surfclass.values),
+                            'albedo': (['x', 'y'], albedo.values),
+                            'Icemask': (['x', 'y'], imagePast.Icemask),
+                            'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                            'FinalMask': (['x', 'y'], combinedMask),
+                            'longitude': (['x', 'y'], imagePast.longitude),
+                            'latitude': (['x', 'y'], imagePast.latitude)
+                        }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
-
-                albedo = None
-                surfClass = None
 
                 files = glob.glob(str(os.environ['PROCESS_DIR'] + 'interpolated_' + '*.nc'))
                 for f in files:
