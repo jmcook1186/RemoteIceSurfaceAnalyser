@@ -688,57 +688,58 @@ def createSummaryData(tile,year,month, savepath,dateList):
     return
 
 
-
-
 def cloud_interpolator(dataset):
     
-    counter  = 0
+    """
+    In this cloud interpolator, the missing values are simply filled with the median value for that layer
 
-    layers = [dataset.classified, dataset.albedo]
+    """
+
+    # define list of layers depending upon whether snicar
+    if config.get('options','retrieve_snicar_params')=='True':
+
+        layers = [dataset.classified, dataset.albedo, dataset.grain_size, dataset.density, dataset.dust, dataset.algae]
+    
+    else:
+    
+        layers = [dataset.classified, dataset.albedo]
+        
+    # define mask
     mask = dataset.FinalMask
 
-    for layer in layers:
+    # loop through layers
+    for i in range(len(layers)):
 
-        x = np.arange(0,layer.shape[1])
-        y = np.arange(0,layer.shape[0])
+        layer = layers[i]
+        layer_median = layer.median().values # calculate median value
+        layer =layer.where(layer>=0,layer_median) # replace nanswith median
 
-        arr = np.ma.masked_invalid(layer)
-        xx,yy = np.meshgrid(x,y)
-
-        x1 = xx[~arr.mask]
-        y1 = yy[~arr.mask]
-        newlayer = arr[~arr.mask]
-        GD1 = interpolate.griddata((x1,y1),newlayer.ravel(),(xx,yy),method='nearest')
-
-        if counter == 0:
+        if i == 0:
             dataset.classified.values = layer
             layer = None
 
-        elif counter == 1:
+        elif i == 1:
             dataset.albedo.values = layer
             layer = None
 
-        elif counter == 2:
+        elif i == 2:
             dataset.grain_size.values = layer
             layer = None
 
-        elif counter == 3:
+        elif i == 3:
             dataset.density.values = layer
             layer = None
 
-        elif counter == 4:
+        elif i == 4:
             dataset.dust.values = layer
             layer = None
         
-        elif counter == 5:
+        elif i == 5:
             dataset.algae.values = layer
             layer = None
 
         else:
             print ("ERROR IN PIXELWISE CLOUD INTERPOLATION: counter out of range")
-
-        counter +=1
-        
 
     dataset = dataset.where(mask ==0)
 

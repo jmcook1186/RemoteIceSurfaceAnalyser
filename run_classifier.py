@@ -309,8 +309,13 @@ for tile in tiles:
                                                          config.get('netcdf', 'author'),
                                                          config.get('netcdf', 'title'))
 
-                dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
+
+                if config.get('options','interpolate_cloud')=='True':
+                    dataset = sentinel2_tools.cloud_interpolator(dataset)
+
                 
+                dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
+
                 # flush dataset from disk
                 dataset = None
                 predicted = None
@@ -332,6 +337,7 @@ for tile in tiles:
     if config.get('options','interpolate_missing_tiles')=='True':
         print("\nINTERPOLATING MISSING TILES")
         sentinel2_tools.imageinterpolator(years,months,tile,proj_info)
+    
 
     # collate info into mfdataset, run summary functions and upload to blob store
     dateList = sentinel2_tools.create_outData(tile,year,month,savepath)
