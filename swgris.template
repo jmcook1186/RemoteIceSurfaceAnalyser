@@ -24,6 +24,8 @@ interpolate_cloud=False
 interpolate_missing_tiles=True
 ; run energy balance model to predict melt?
 calculate_melt=False
+;upload outData to blob storage and delete local copy?
+upload_to_blob=True
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).

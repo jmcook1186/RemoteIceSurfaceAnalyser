@@ -24,8 +24,6 @@ AZURE_SECRET - path and filename of config file containing Azure secret informat
 
 
 """
-# TODO: work out how to update met data in EB model function for each pixel/date combination (apart from albedo, met data currently constant!!!)
-# TODO improve interpolation of cloudy pixels (currently just columnwise forward-fills using previous valid value over NaNs)
 
 import sys
 import os
@@ -125,7 +123,6 @@ for tile in tiles:
     
     # first create directory to save outputs to
     dirName = str(os.environ['PROCESS_DIR'] + '/outputs/' + tile + "/")
-    subdirName = str(os.environ['PROCESS_DIR'] + '/outputs/' + tile + "/" + "interpolated")
 
     # Create target Directory if it doesn't already exist
     if not os.path.exists(dirName):
@@ -134,19 +131,12 @@ for tile in tiles:
     else:
         print("Directory ", dirName, " already exists")
 
-        
-    # Create target subdirectory if it doesn't already exist
-    if not os.path.exists(subdirName):
-        os.mkdir(subdirName)
-        print("Directory ", subdirName, " Created ")
-    else:
-        print("Directory ", subdirName, " already exists")
 
     # make DirName the path to save files to
     savepath = dirName
 
     for date in dates:
-        print("\n DOWNLOADING FILES: {} {}\n.format(tile,date")
+        print("\n DOWNLOADING FILES: {} {}\n".format(tile,date))
 
         # query blob for files in tile and date range
         filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
@@ -208,8 +198,7 @@ for tile in tiles:
                                                               s2xr.x, s2xr.y, proj_info)
 
                 # 3) add predicted map array and add metadata
-                if config.get('options','interpolate_cloud')=='True':
-                    predicted = predicted.interpolate_na(dim='y',method='linear',use_coordinate=True)
+
                 predicted = predicted.fillna(0)
                 predicted = predicted.where(mask2 > 0)
                 predicted.encoding = {'dtype': 'int16', 'zlib': True, '_FillValue': -9999}
@@ -220,8 +209,7 @@ for tile in tiles:
                 predicted.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                 # add albedo map array and add metadata
-                if config.get('options','interpolate_cloud')=='True':
-                    albedo = albedo.interpolate_na(dim='y',method='linear',use_coordinate=True)
+
                 albedo = albedo.fillna(0)
                 albedo = albedo.where(mask2 > 0)
                 albedo.encoding = {'dtype': 'int16', 'scale_factor': 0, 'zlib': True, '_FillValue': -9999}
@@ -249,8 +237,7 @@ for tile in tiles:
 
                     # Add metadata to retrieved snicar parameter arrays + mask
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
-                        if config.get('options','interpolate_cloud')=='True':
-                            side_lengths = side_lengths.interpolate_na(dim='y',method='linear',use_coordinate=False)
+
                         side_length.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         side_length.name = "Grain size"
                         side_length.attrs['long_name'] = 'Grain size in microns. Assumed homogenous to 10 cm depth'
@@ -258,8 +245,7 @@ for tile in tiles:
                         side_length.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
                     
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'densities.nc')) as density:
-                        if config.get('options','interpolate_cloud')=='True':
-                            density = density.interpolate_na(dim='y',method='linear',use_coordinate=False)
+
                         density.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         density.name = "Density"
                         density.attrs['long_name'] = 'Ice column density in kg m-3. Assumed to be homogenous to 10 cm depth'
@@ -267,8 +253,7 @@ for tile in tiles:
                         density.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'dust.nc')) as dust:
-                        if config.get('options','interpolate_cloud')=='True':
-                            dust = dust.interpolate_na(dim='y',method='linear',use_coordinate=False)
+
                         dust.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         dust.name = "Dust"
                         dust.attrs['long_name'] = 'Dust mass mixing ratio in upper 1mm of ice column'
@@ -276,8 +261,7 @@ for tile in tiles:
                         dust.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
-                        if config.get('options','interpolate_cloud')=='True':
-                            algae = algae.interpolate_na(dim='y',method='linear',use_coordinate=False)
+
                         algae.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         algae.name = "Algae"
                         algae.attrs['long_name'] = 'Ice column algae in kg m-3. Assumed to be homogenous to 10 cm depth'
@@ -316,43 +300,9 @@ for tile in tiles:
                     },
                         coords={'x': s2xr.x, 'y': s2xr.y})
 
-  
-                # run pixelwise energy balance model
-                
-                if config.get('options','calculate_melt')=='True':
-                    print("\nRUNNING EB MODEL\n")
-                    n_cpus = mp.cpu_count()
-
-                    # extract albedo layer from dataset, divide into n_cpus number of chunks
-                    albedo = np.ravel(np.array(dataset.albedo.values))
-                    albedo_chunks = np.array_split(albedo,n_cpus)
-
-                    lat = np.ravel(np.array(dataset.latitude))
-                    lat_chunks = np.array_split(lat,n_cpus)
-
-                    lon = np.ravel(np.array(dataset.longitude))
-                    lon_chunks = np.array_split(lon,n_cpus)
-
-                    # define function to be applied pixelwise (distributed using multiprocessing)
-                    
-                    with mp.Pool(processes=n_cpus) as pool:
-
-                        # starts the sub-processes without blocking
-                        # pass the chunk to each worker process
-                        result = pool.map(bsc.run_ebmodel,albedo_chunks, lat_chunks, lon_chunks)
-
-                    # reshape to original dims, convert to xr DataArray, apply mask and send to netcdf
-                    result = np.reshape(np.array(result),(5490,5490))
-                    resultxr = xr.DataArray(data=result,dims=['y','x'], coords={'x':s2xr.x, 'y':s2xr.y}).chunk(2000,2000)
-                    resultxr = resultxr.where(mask2>0)
-                    resultxr.to_netcdf(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + "/MELT_{}_{}.nc".format(tile,date)))
-
-                    # flush memory
-                    result = None
-                    resultxr = None
-
-                    dataset['melt'] = xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'outputs/' + tile + "/MELT_{}_{}.nc".format(tile,date)))
-
+                # if toggled, interpolate over cloudy pixels
+                if config.get('options','interpolate_cloud')=='True':
+                    dataset = sentinel2_tools.cloud_interpolator(dataset)
 
                 # add geo info
                 dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y',
@@ -373,7 +323,7 @@ for tile in tiles:
                 print("GARBAGE COLLECTION\n")
                 gc.collect()
                 # generate summary data
-                # ssummaryDF = bsc.albedo_report(tile, date, savepath)
+                summaryDF = bsc.albedo_report(tile, date, savepath)
         
         # clear process directory 
         sentinel2_tools.clear_img_directory(os.environ['PROCESS_DIR'])
@@ -381,14 +331,11 @@ for tile in tiles:
     # interpolate missing tiles if toggled ON
     if config.get('options','interpolate_missing_tiles')=='True':
         print("\nINTERPOLATING MISSING TILES")
-        sentinel2_tools.imageinterpolator(years,months,tile)
+        sentinel2_tools.imageinterpolator(years,months,tile,proj_info)
 
-    # collate individual dates into single dataset for each tile 
-    print("\nCOLLATING INDIVIDUAL TILES INTO FINAL DATASET")
-    #concat_dataset = bsc.concat_all_dates(savepath, tile)
-
-    # send dataset to azure blob storage and delete from local storage
-    azure.dataset_to_blob(str(os.environ['PROCESS_DIR']+'outputs/'+ tile + '/'), delete_local_nc=True)
+    # collate info into mfdataset, run summary functions and upload to blob store
+    dateList = sentinel2_tools.create_outData(tile,year,month,savepath)
+    sentinel2_tools.createSummaryData(tile,year,month,savepath,dateList)
 
     # save logs to csv files
     print("\n SAVING QC LOGS TO TXT FILES")

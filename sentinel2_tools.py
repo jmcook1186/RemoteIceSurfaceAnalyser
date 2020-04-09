@@ -291,7 +291,7 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
     return QCflag, useable_area
     
 
-def imageinterpolator(years, months, tile):
+def imageinterpolator(years, months, tile, proj_info):
     """
     Function identifies the missing dates in the image repository - i.e those days where S2 images are not availabe due to
     cloud cover, insufficient ice coverage, a download problem or simply lack of S2 overpass. For each missing date, this
@@ -335,7 +335,7 @@ def imageinterpolator(years, months, tile):
     for i in np.arange(0, len(DateList), 1):
 
         if config.get('options','vm')=='True':
-            DateList[i] = DateList[i][79:-34]
+            DateList[i] = DateList[i][65:-34]
             DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
                                                                             6:8])  # format string to match format defined above
             DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
@@ -431,7 +431,7 @@ def imageinterpolator(years, months, tile):
 
                         newClassImagexr = xr.DataArray(newClassImage)
                         newClassImage = None
-                        newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'), mode='w')
+                        newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+'interpolated_{}.nc'.format(filenames[counter])), mode='w')
                         newClassImagexr = None
 
                     else:
@@ -445,11 +445,13 @@ def imageinterpolator(years, months, tile):
                         newImage = np.ma.array(newImage, mask=combinedMask)
                         newImage = newImage.filled(np.nan)
                         newImage = abs(newImage)
-                        newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
-                        newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+
+                        if counter ==0: # for albedo layer, ensure values in range
+                            newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+                            newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
                         
                         newImagexr = xr.DataArray(newImage)
-                        newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'), mode='w')
+                        newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+'interpolated_{}.nc'.format(filenames[counter])), mode='w')
                         newImagexr = None
                         counter +=1                   
 
@@ -471,6 +473,7 @@ def imageinterpolator(years, months, tile):
                                             'Icemask': (['x', 'y'], imagePast.Icemask),
                                             'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
                                             'FinalMask': (['x', 'y'], combinedMask),
+                                            proj_info.attrs['grid_mapping_name']: proj_info,
                                             'longitude': (['x', 'y'], imagePast.longitude),
                                             'latitude': (['x', 'y'], imagePast.latitude)
                                         }, coords = {'x': imagePast.x, 'y': imagePast.y})
@@ -510,7 +513,7 @@ def imageinterpolator(years, months, tile):
                         newClassImage = newClassImage.filled(np.nan)
                         newClassImagexr = xr.DataArray(newClassImage)
                         newClassImage = None
-                        newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
+                        newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+'interpolated_{}.nc'.format(filenames[counter])))
                         newClassImagexr = None
 
                     
@@ -523,8 +526,11 @@ def imageinterpolator(years, months, tile):
                         newImage = np.ma.array(newImage, mask=combinedMask)
                         newImage = newImage.filled(np.nan)
                         newImage = abs(newImage)
-                        newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
-                        newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+
+                        if counter ==0: # for albedo layer, ensure values in range
+                            newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
+                            newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                        
                         newImagexr = xr.DataArray(newImage)
                         newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
                         newImagexr = None
@@ -534,6 +540,7 @@ def imageinterpolator(years, months, tile):
                 with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc')) as albedo:
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc')) as surfClass:
 
+
                         # collate data into xarray dataset and copy metadata from PAST
                         newXR = xr.Dataset({
                             'classified': (['x', 'y'], surfclass.values),
@@ -541,6 +548,7 @@ def imageinterpolator(years, months, tile):
                             'Icemask': (['x', 'y'], imagePast.Icemask),
                             'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
                             'FinalMask': (['x', 'y'], combinedMask),
+                            proj_info.attrs['grid_mapping_name']: proj_info,
                             'longitude': (['x', 'y'], imagePast.longitude),
                             'latitude': (['x', 'y'], imagePast.latitude)
                         }, coords = {'x': imagePast.x, 'y': imagePast.y})
@@ -551,19 +559,187 @@ def imageinterpolator(years, months, tile):
                     os.remove(f)
 
             # save synthetic image in same format in sub directory as original "good" images
-            newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/interpolated/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
+            newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
             print("Interpolated dataset saved locally")
             
-            print("Connecting to blob")
-            azure_cred = configparser.ConfigParser()
-            azure_cred.read_file(open(os.environ['AZURE_SECRET']))
-            azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
-                                    azure_cred.get('account', 'key'))
-
-            # send dataset to azure storage blob and delet the local copy to save disk space
-            print("Sending dataset to blob storage and deleting local copy")
-            azure.dataset_to_blob(str(os.environ["PROCESS_DIR"] + "/outputs/{}/interpolated/".format(tile)), delete_local_nc=True)
-
             newXR = None
 
     return
+
+
+
+def create_outData(tile,year,month,savepath):
+
+    outPath = str(savepath)
+    dateList = []
+
+    # GRAB FILES TO PROCESS
+    file_list = glob.glob(outPath+'*Albedo_Data.nc')
+    file_list = sorted(file_list)
+    
+    # GRAB DATES FROM FILE STRINGS
+    for i in file_list:
+        dateList.append(i.split(str(tile+'_'))[1].split('_Class')[0])
+
+    # OPEN ALL FLES INTO ONE DATASET, SAVE CONCATENATED FILE TO NETCDF
+    ds = xr.open_mfdataset(file_list,concat_dim='date',chunks={'x': 2000, 'y': 2000})
+    ds = ds.assign_coords(date=dateList)
+
+    ds.to_netcdf(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
+    ds = None
+
+    ### HERE DELETE INDIVIDUAL FILES
+    for f in file_list:
+        os.remove(f)
+
+    return dateList
+
+
+def createSummaryData(tile,year,month, savepath,dateList):
+
+    outPath = savepath
+
+    ds = xr.open_dataset(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
+    
+    # DEFINE # VARIABLES TO RECORD WHEN SNICAR RETRIEVAL IS ON/OFF
+    if config.get('options','retrieve_snicar_params')=='True':
+        
+        nvar = 10
+
+    else:
+        
+         nvar = 3
+
+    # DEFINE SIZE OF OUT ARRAYS
+    if config.get('options','retrieve_snicar_params')==True:
+        out = np.zeros(shape=(10,len(ds.date)))
+        outClass = np.zeros(shape=(nvar,len(ds.date),7))
+
+    else:
+        out = np.zeros(shape=(2,len(ds.date)))
+        outClass = np.zeros(shape=(nvar,len(ds.date),7))
+
+
+    # START SUMMARIZING DATA AND APPENDING RESULTS TO OUT ARRAYS 
+    if config.get('options','retrieve_snicar_params')=='True': 
+    
+        
+        for i in range(len(ds.date)):
+
+            date_i = dateList[i]
+            # scalar outputs
+            out[0,i] = ds.albedo.sel(date=date_i).mean().values  # mean albedo across whole tile
+            out[1,i] = ds.albedo.sel(date=date_i).std().values # std albedo across whole tile
+            out[2,i] = ds.side_lengths.sel(date=date_i).mean().values # mean grain size
+            out[3,i] = ds.side_lengths.sel(date=date_i).std().values # std grain size
+            out[4,i] = ds.density.sel(date=date_i).mean().values # mean density
+            out[5,i] = ds.density.sel(date=date_i).std().values # std density
+            out[6,i] = ds.algae.sel(date=date_i).mean().values # mean algae
+            out[7,i] = ds.algae.sel(date=date_i).std().values # mean algae
+            out[8,i] = ds.dust.sel(date=date_i).mean().values #mean dust
+            out[9,i] = ds.dust.sel(date=date_i).std().values #std dust
+            
+            # outputs by class
+            for j in range(7):
+
+                outClass[0,i,j] = len(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # count instances of each class
+                outClass[1,i,j] = np.mean(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
+                outClass[2,i,j] = np.std(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
+
+        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae','meanDust','STDDust'],'date':dateList})
+        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD'], 'date':dateList,
+        'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
+
+        outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
+        outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
+
+
+    else:
+        
+        for i in range(len(ds.date)):
+            
+            date_i = dateList[i]
+            # scalar outputs
+            out[0,i] = ds.albedo.sel(date=date_i).mean().values  # mean albedo across whole tile
+            out[1,i] = ds.albedo.sel(date=date_i).std().values # std albedo across whole tile
+
+            # outputs by class
+            for j in range(7):
+
+                outClass[0,i,j] = len(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # count instances of each class
+                outClass[1,i,j] = np.mean(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
+                outClass[2,i,j] = np.std(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
+
+        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STD Albedo'],'date':dateList})
+        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD'], 'date':dateList,
+        'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
+
+        outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
+        outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
+
+    if config.get('options','upload_to_blob')=='True':
+        # send dataset to azure blob storage and delete from local storage
+        azure_cred = configparser.ConfigParser()
+        azure_cred.read_file(open(os.environ['AZURE_SECRET']))
+        azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
+                                        azure_cred.get('account', 'key'))
+        azure.dataset_to_blob(str(os.environ['PROCESS_DIR']+'outputs/'+ tile + '/'), delete_local_nc=True)
+
+    return
+
+
+
+
+def cloud_interpolator(dataset):
+    
+    counter  = 0
+
+    layers = [dataset.classified, dataset.albedo]
+    mask = dataset.FinalMask
+
+    for layer in layers:
+
+        x = np.arange(0,layer.shape[1])
+        y = np.arange(0,layer.shape[0])
+
+        arr = np.ma.masked_invalid(layer)
+        xx,yy = np.meshgrid(x,y)
+
+        x1 = xx[~arr.mask]
+        y1 = yy[~arr.mask]
+        newlayer = arr[~arr.mask]
+        GD1 = interpolate.griddata((x1,y1),newlayer.ravel(),(xx,yy),method='nearest')
+
+        if counter == 0:
+            dataset.classified.values = layer
+            layer = None
+
+        elif counter == 1:
+            dataset.albedo.values = layer
+            layer = None
+
+        elif counter == 2:
+            dataset.grain_size.values = layer
+            layer = None
+
+        elif counter == 3:
+            dataset.density.values = layer
+            layer = None
+
+        elif counter == 4:
+            dataset.dust.values = layer
+            layer = None
+        
+        elif counter == 5:
+            dataset.algae.values = layer
+            layer = None
+
+        else:
+            print ("ERROR IN PIXELWISE CLOUD INTERPOLATION: counter out of range")
+
+        counter +=1
+        
+
+    dataset = dataset.where(mask ==0)
+
+    return dataset

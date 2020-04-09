@@ -1,11 +1,11 @@
 # Big Ice Surf Classifier
 
-This repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on fiels spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as csv files for each tile/date.
+This repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as csv files for each tile/date.
 
 ## Setup
 
 ### Hardware
-The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when realy necessary. However, the invert_snicar() function is demanding and can take up to a day to run on my 8 core i7-7700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 64 core Azure Linux Data Science Machine, in which case one tile takes 53 mins to process. With the SNICAR inversion and the EB model functions both toggled ON, ~1 hour 5 mins per tile. Bear in mind that in Nov 2019, the VM cost is ~£3/hour.
+The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when realy necessary. However, the invert_snicar() function is demanding and can take up to a day to run on my 8 core i7-7700 32GB RAM laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 72 core Azure Linux Data Science Machine (Fs72), in which case one tile takes ~7 mins to process, and a full month can be processed in about an hour. In Nov 2019, the VM cost is ~£3/hour.
 
 ### Environment
 The environment can be set up manually using the following commands:
@@ -13,7 +13,7 @@ The environment can be set up manually using the following commands:
     conda create -n IceSurfClassifier -c conda-forge python ipython xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
     pip install azure sklearn-xarray sentinelsat dask[complete]
 
-or alternatively the environment can be built from environment.yaml using:
+or alternatively on a linux OS the environment can be built from environment.yaml using:
 
     conda env -f environment.yml
 
@@ -152,7 +152,7 @@ Images where pixels have been masked out using the CloudMask (the sensivity of w
 There is an option to toggle interpolation on/off. If interpolation is toggled on, the script will use pixel-wise linear interpolation to generate synthetic datasets for each missing date in the time series. Dates may be missing from the time series sue to a lack of overpass or a data quality issue such as excessive cloud cover. The interpolation function identifies these missing tiles, then identifies the most recent and nearest future dates where a valid dataset was acquired. It then applies a point-to-point linear regression between the values in each pixel in the past image and the corresponding pixel in the future image. The pixel values are then predicted using the regression equation for the missing dates. Recommend also scanning through the images manually after interpolation because occasionally interpolating pixels that were cloud-free in the past and cloudy in the future or vice versa can lead to unrealistic interpolation results. Anomalous dates should be manually discarded or alternatively the interpolation function could be run as a standalone with "good" past and future tiles manually selected.
 
 ### Energy Balance Modelling
-
+TOGGLED OFF BY DEFAULT
 There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 12 mins on 64 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
 
 ### Cloud interpolation
@@ -186,6 +186,10 @@ To test a full run without downloading files from blob, comment out lines 196 - 
 Dec 19th 2019: VM disk space being used up. Changed workflow so that .nc files are uploaded to blob storage and deleted from local storage on creation. Deactivated summary statistics and dataset concatenation functions with the intention of calling these separately post-hoc, i.e. populate blob storage using VM then later download, concatenate and analyse datasets locally to save expensive compute time on VM. Unsurprisingly introducing uploads to blob storage has slowed down the script somewhat. Expect approximately 1.5 hours per tile for the complete sequence including EB modelling and snicar inversion function.
 
 Dec 19th 2019: added zipped folder of PROMICE AWS data for three sites to the repo. Intention is to use these data to provide input data to the eb model.
+
+March 2020: added 1TB disk to VM - named "datadrive". BISC code now run from datadrive to ensure sufficient disk space for collating output netCDFs without relying on constantly up and downloading from blobs.
+
+March 2020: updated outputs. Now collates individual tiles into a multifile xarray dataset and saves to netcdf. Data summary is also saved as netcdf in the output folder. Much neater and more navigable output file structure.
 
 
 ## Contributions

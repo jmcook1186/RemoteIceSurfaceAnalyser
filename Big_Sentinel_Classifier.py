@@ -273,6 +273,7 @@ class SurfaceClassifier:
 
 
     def albedo_report(self, tile, date, savepath):
+        
         """ Report albedo in each surface type. 
 
         TODO: Refactor to cope with different surface type labels 
@@ -294,6 +295,7 @@ class SurfaceClassifier:
 
             # Check for surface classes not found in image and add them into
             # the results summary.
+            
             to_concat = {}
             for n in np.arange(1,7):
                 try:
