@@ -179,9 +179,6 @@ class SurfaceClassifier:
 
         param_array = unravel(idx_array,side_lengths,densities,dust,algae)
         param_array = np.array(param_array.compute())
-
-        print("param_array shape = ",param_array.shape)
-        print("param_array type = ",type(param_array))
         
         # flush disk
         idx_array = None
@@ -199,11 +196,9 @@ class SurfaceClassifier:
             for i in np.arange(0,len(param),1):
 
                 if i ==0: # in first loop, pixels !=i should be replaced by param_array values, as result_array doesn't exist yet
-                    print("result_array gets values {}".format(param[i][0]))
                     result_array = np.where(param_array[counter]==i, param[i][0], param_array[counter])
 
                 else:
-                    print("result_array gets values {}".format(param[i][0]))
                     result_array = np.where(param_array[counter]==i, param[i][0], result_array)
 
             # reshape to original dims, add metadata, convert to xr DataArray, apply mask
@@ -215,8 +210,6 @@ class SurfaceClassifier:
 
             # PREVENT ALGAL/DUST OVERESTIMATE IN WATER/CC/SN PIXELS ##
             resultxr = resultxr.where(mask2>0)
-
-            print(result_array)
 
             # send to netcdf and flush memory
             resultxr.to_netcdf(str(os.environ['PROCESS_DIR']+ "{}.nc".format(param_names[counter])))

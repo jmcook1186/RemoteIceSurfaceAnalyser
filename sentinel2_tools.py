@@ -567,7 +567,6 @@ def imageinterpolator(years, months, tile, proj_info):
     return
 
 
-
 def create_outData(tile,year,month,savepath):
 
     outPath = str(savepath)
@@ -576,6 +575,11 @@ def create_outData(tile,year,month,savepath):
     # GRAB FILES TO PROCESS
     file_list = glob.glob(outPath+'*Albedo_Data.nc')
     file_list = sorted(file_list)
+
+    # if toggled, downsample the outData to the required resolution
+    if config.get('options','downsample_outdata')=='True':
+        outDataRes = config.get('options','outData_resolution')
+        file_list = file_list[0:len(file_list):outDataRes]
     
     # GRAB DATES FROM FILE STRINGS
     for i in file_list:
@@ -630,8 +634,8 @@ def createSummaryData(tile,year,month, savepath,dateList):
             # scalar outputs
             out[0,i] = ds.albedo.sel(date=date_i).mean().values  # mean albedo across whole tile
             out[1,i] = ds.albedo.sel(date=date_i).std().values # std albedo across whole tile
-            out[2,i] = ds.side_lengths.sel(date=date_i).mean().values # mean grain size
-            out[3,i] = ds.side_lengths.sel(date=date_i).std().values # std grain size
+            out[2,i] = ds.grain_size.sel(date=date_i).mean().values # mean grain size
+            out[3,i] = ds.grain_size.sel(date=date_i).std().values # std grain size
             out[4,i] = ds.density.sel(date=date_i).mean().values # mean density
             out[5,i] = ds.density.sel(date=date_i).std().values # std density
             out[6,i] = ds.algae.sel(date=date_i).mean().values # mean algae
@@ -741,6 +745,6 @@ def cloud_interpolator(dataset):
         else:
             print ("ERROR IN PIXELWISE CLOUD INTERPOLATION: counter out of range")
 
-    dataset = dataset.where(mask ==0)
+    dataset = dataset.where(mask > 0)
 
     return dataset

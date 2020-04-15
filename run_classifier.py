@@ -310,10 +310,11 @@ for tile in tiles:
                                                          config.get('netcdf', 'title'))
 
 
+                # if toggled, interpolate over missing values due to cloud cover
                 if config.get('options','interpolate_cloud')=='True':
                     dataset = sentinel2_tools.cloud_interpolator(dataset)
 
-                
+                # send dataset to netcdf file
                 dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
 
                 # flush dataset from disk
