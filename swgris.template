@@ -28,6 +28,8 @@ calculate_melt=False
 downsample_outData=True
 ; what resolution (in days) should the outData have?
 outData_resolution = 3
+; delete individual files after collated multi-date file created?
+remove_individual_files=True
 ; upload outData to blob storage and delete local copy?
 upload_to_blob=True
 

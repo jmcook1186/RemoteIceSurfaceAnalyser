@@ -599,34 +599,24 @@ def create_outData(tile,year,month,savepath):
     return dateList
 
 
-def createSummaryData(tile,year,month, savepath,dateList):
+def createSummaryData(tile,year,month, savepath, dateList):
 
     outPath = savepath
 
     ds = xr.open_dataset(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
     
-    # DEFINE # VARIABLES TO RECORD WHEN SNICAR RETRIEVAL IS ON/OFF
-    if config.get('options','retrieve_snicar_params')=='True':
-        
-        nvar = 10
-
-    else:
-        
-         nvar = 3
-
     # DEFINE SIZE OF OUT ARRAYS
-    if config.get('options','retrieve_snicar_params')==True:
+    if config.get('options','retrieve_snicar_params')=='True':
         out = np.zeros(shape=(10,len(ds.date)))
-        outClass = np.zeros(shape=(nvar,len(ds.date),7))
+        outClass = np.zeros(shape=(11,len(ds.date),7))
 
     else:
         out = np.zeros(shape=(2,len(ds.date)))
-        outClass = np.zeros(shape=(nvar,len(ds.date),7))
+        outClass = np.zeros(shape=(3,len(ds.date),7))
 
 
     # START SUMMARIZING DATA AND APPENDING RESULTS TO OUT ARRAYS 
     if config.get('options','retrieve_snicar_params')=='True': 
-    
         
         for i in range(len(ds.date)):
 
@@ -649,10 +639,18 @@ def createSummaryData(tile,year,month, savepath,dateList):
                 outClass[0,i,j] = len(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # count instances of each class
                 outClass[1,i,j] = np.mean(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
                 outClass[2,i,j] = np.std(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
-
+                outClass[3,i,j] = np.mean(ds.grain_size.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of grain size in each class
+                outClass[4,i,j] = np.std(ds.grain_size.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of grain size in each class
+                outClass[5,i,j] = np.mean(ds.density.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of density in each class
+                outClass[6,i,j] = np.std(ds.density.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of density in each class
+                outClass[7,i,j] = np.mean(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of algae in each class
+                outClass[8,i,j] = np.std(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of algae in each class
+                outClass[9,i,j] = np.mean(ds.dust.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of dust in each class
+                outClass[10,i,j] = np.std(ds.dust.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of dust in each class
+        
         outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae','meanDust','STDDust'],'date':dateList})
-        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD'], 'date':dateList,
-        'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
+        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD','GrainMean','GrainSTD','DensityMean','DensitySTD','AlgaeMean','AlgaeSTD','DustMean','DustSTD'], 'date':dateList,\
+            'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
 
         outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
         outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
@@ -681,7 +679,17 @@ def createSummaryData(tile,year,month, savepath,dateList):
         outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
         outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
 
+    # if toggled, remove individual files from /outputs leaving only the concatenated multi-date file
+    if config.get('options','remove_individual_files')=='True':
+
+        file_list = glob.glob(outPath+'*Albedo_Data.nc')
+
+        for file in file_list:
+            os.remove(file)
+            
+
     if config.get('options','upload_to_blob')=='True':
+
         # send dataset to azure blob storage and delete from local storage
         azure_cred = configparser.ConfigParser()
         azure_cred.read_file(open(os.environ['AZURE_SECRET']))

@@ -157,7 +157,7 @@ class SurfaceClassifier:
         stackedT = stackedT.chunk(20000,9)
 
         # reformat LUT: flatten LUT from 3D to 2D array with one column per combination of RT params, one row per wavelength
-        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT_2058.npy')).reshape(2058,len(wavelengths))
+        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT.npy')).reshape(2160,len(wavelengths))
 
         # find most similar LUT spectrum for each pixel in S2 image
         # astype(float 16) to reduce memory allocation (default was float64)
@@ -225,7 +225,12 @@ class SurfaceClassifier:
         return
 
     def run_ebmodel(self, alb):
-
+        
+        """
+        Not functional in current version - can be toggled on - and it will run successfully - but all 
+        input values other than albedo are held constant.
+        
+        """
            ## Input Data, as per first row of Brock and Arnold (2000) spreadsheet
             lat = 67.0666
             lon = -49.38
