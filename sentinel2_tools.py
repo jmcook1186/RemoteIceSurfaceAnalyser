@@ -320,7 +320,7 @@ def imageinterpolator(years, months, tile, proj_info):
         seasonEnd = str(str(years[-1]) + '_' + str(months[-1]) + '_31')
 
     # get list of "good" nc files in process directory and extract the dates as strings
-    DateList = glob.glob(str(os.environ['PROCESS_DIR'] + '/outputs/22wev/22wev_*.nc'))
+    DateList = glob.glob(str(os.environ['PROCESS_DIR'] + '/outputs/' + tile + '/' + tile + '_*.nc'))
     fmt = '%Y_%m_%d'  # set format for date string
     DOYlist = []  # empty list ready to receive days of year
 
@@ -382,9 +382,9 @@ def imageinterpolator(years, months, tile, proj_info):
 
             # load past and future images that will be used for interpolation
             imagePast = xr.open_dataset(str(
-                os.environ['PROCESS_DIR'] + '/outputs/22wev/22wev_' + closestPastString + '_Classification_and_Albedo_Data.nc'))
+                os.environ['PROCESS_DIR'] + '/outputs/' + tile + '/' + tile + '_' + closestPastString + '_Classification_and_Albedo_Data.nc'))
             imageFuture = xr.open_dataset(str(
-                os.environ['PROCESS_DIR']+'/outputs/22wev/22wev_' + closestFutureString + '_Classification_and_Albedo_Data.nc'))
+                os.environ['PROCESS_DIR']+'/outputs/' + tile + '/' + tile + '_' + closestFutureString + '_Classification_and_Albedo_Data.nc'))
 
             # conditionally include or exclude grain size, density, dust and algae 
             if config.get('options','retrieve_snicar_params')=='True':
@@ -559,7 +559,7 @@ def imageinterpolator(years, months, tile, proj_info):
                     os.remove(f)
 
             # save synthetic image in same format in sub directory as original "good" images
-            newXR.to_netcdf(os.environ["PROCESS_DIR"] + "/outputs/22wev/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString), mode='w')
+            newXR.to_netcdf(str(os.environ["PROCESS_DIR"] + "/outputs/" + tile + "/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString)), mode='w')            
             print("Interpolated dataset saved locally")
             
             newXR = None

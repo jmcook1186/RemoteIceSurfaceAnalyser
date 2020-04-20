@@ -2,6 +2,14 @@
 
 This repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as netcdf files for each tile.
 
+The South Western Greenland Ice Sheet Dark Zone is contained within the following five tiles, spanning 64 - 70 degrees N:
+
+22wev
+22web
+22wec
+22wet
+22weu
+
 ## Setup
 
 ### Hardware
@@ -29,7 +37,7 @@ The classifier requires several environment variables to be set:
 * `PROCESS_DIR`
 * `SEN2COR_BIN` : e.g. `~/Sen2Cor-02.05.05-Linux64/bin/`
 
-The two "secret" variables are paths to files containing the account keys for the azure blob storage and Copernicus Sentinelsat APIs. These files can be located anywhere on your system and preferably outside the repository (although the `.gitignore` file is set to ignore `.secret` files to reduce the risk of these files being committed accidentally).
+The two "secret" variables are paths to files containing the account keys for the azure blob storage and Copernicus Sentinelsat APIs. These files can be located anywhere on your system and preferably outside the repository (although the `.gitignore` file is set to ignore `.secret` files to reduce the risk of these files being committed accidentally). 
  
 Create a file to hold Azure secret information, e.g. `.azure_secret`, with format:
 
@@ -55,7 +63,36 @@ The user-defined variable values are all defined in a template file (e.g.  `swgr
 
 The user should enter their desired values into the template file prior to running the classifier. Multiple templates can be saved and called along with the classifier.
 
-Note that the LUT parameters are included in the template file. These MUST be identical to the parameters used to generate the LUT used in the snicar inversion, else the retrieval will grab the wrong values. Unless the user has generated a new LUT, this should NOT be changed.
+#### Template Variables:
+
+Options:
+
+1) vm: this is a Boolean toggled True if the code is run on an Azure VM or local machine. This is relevant because different paths are used on each machine. This currently mostly affects the image_interpolator() function in sentinel2_tools.py because that function uses the positions of certain characters in the filepaths to extract dates to interpolate between. This could be improved in future by replacing the positional character extraction by using regex or string matching, this would make the code more portable and insensitive to running on different machines.
+2) tiles: this is a comma-separated list of the tile IDs to process
+3) years: this is a comma separated list of the years to include. Note that because of a quirk of how the data is collated, only one year can be processed per run, i.e. use separate runs for each year of interest)
+4) months: this is a comma-separated list of the months to include
+5) classifier: this is the file name for the pickled sklearn classifier to use
+6) icemask: this is the file name for the ice mask to use
+7) resolution: the desired resolution of the sentinel 2 imagery
+8) savefigs: now redundant option to toggle figure saving on/off
+9) retrieve_snicar_params: toggle to control whether the RTM inversion function is run. If true, grain size, density, algal concentration, dust concentration are included in the output data, if not they are absent.
+10) interpolate_cloud: toggle to control whether pixels obscured by cloud are interpolated over to give continuous data across the icy part of the image
+11) interpolate_missing_tiles: toggle to control whether missing dates are infilled by linear interpolation between "good" dates
+12) calculate_melt: toggle to control whether melt rates are calculated pixelwise across the image area. This is off by default because although the eb modelling works, elevation and meterological input valus are currently held constant, which is of limited value.
+13) downsample_outdata: toggle to determine whether to include edaily data, or to reduce the temporal resolution to save memory
+14) outData_resolution: provide an integer to determine the temporal resolution, in days, of the outData
+15) remove_individual_files: toggle to determine whether, after the collated data file is created, the individual files used are discarded to kept
+16) upload_to_blob: toggle to control whether the output datasets are uploaded to Azure blob storage and deleted from the local disk. This can be slow depending upon internet upload speed and file size (1 tile, 1 month = ~30 GB)
+    
+
+Thresholds:
+1) minArea: integer to determine the minimum amount of the total image area that should be covered by ice (as opposed to tundra, ocean etc) for the image to be deemed acceptable quality to proceedwith analysis
+2) cloudCoverThresh: integer to define the minimum probability of a pixel being obscured by cloud - if the probability is greater than this value, the pixel will be considered cloudy and interpolated over if interpolate_cloud is toggled on, or left as NaN if interpolate_cloud is toggled off. If the probability is less than this threshold, the pixel is considered clear and used in the analysis.
+
+netcdf:
+author: author information to be used as attributes in the outdata netCDFs
+title: file title to be used as attribute data in the outData netCDFs
+predicted_legend: text labels for each numerically labelled class (e.g. "Snow:1; Water:2; Cryoconite:3; Clean Ice:4; Light Algae:5; Heavy Algae:6")
 
 
 ### Directory Structure
@@ -129,7 +166,7 @@ Run `python run_classifier.py <template.template>`.
 
 ### Classification
 
-The classifier assigns one of 6 surface type labels to each pixel. This is achieved using a random forest classifier trained on field spectroscopy data and validated using multispectral imagery acquired from a UAV flown over the surface of the Greenland Ice Sheet in summer 2017 and 2018. 
+The classifier assigns one of 6 surface type labels to each pixel. This is achieved using a random forest classifier trained on field spectroscopy data and validated using multispectral imagery acquired from a UAV flown over the surface of the Greenland Ice Sheet in summer 2017 and 2018. See Cook et al. (2020): Glacier algae accelerate melting on the SW Greenland Ice Sheet, The Cryosphere (https://doi.org/10.5194/tc-14-309-2020)
 
 ### Albedo
 
@@ -137,9 +174,9 @@ Surface albedo is calculated using Liang et al's (2000) narrowband to broadband 
 
 ### Snicar retrievals
 
-There is an option in the template file to retrieve snicar parameters. If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of snicar-generated spectra. The snicar parameters (grain size, density, dust concentration, algae concentration) used to generate the closest-matching spectra are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. 
+There is an option in the template file to retrieve ice surface parameters using an inverted radiative transfer model (BioSNICAR_GO from Cook et al. 2020: https://doi.org/10.5194/tc-14-309-2020). If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of 2400 BioSNICAR_GO-generated spectra. The snicar parameters (grain size, density, dust concentration, algae concentration) used to generate the closest-matching spectra (measured as absolute error) are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. 
 
-Note that despite the LUT approach, the snicar retrieval is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in 7 minutes per tile. Increasing the size of the LUT increases the computation time significantly. Currently the LUT comprises 2058 individual snicar runs, produced by running snicar with all possible combinations of 6 grain sizes, 7 densities, 7 dust concentrations and 7 algal concentrations. 
+Note that despite the LUT approach, the RTM inversion is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in about 7 minutes per tile. Increasing the size of the LUT increases the computation time. Currently the LUT comprises 2400 individual simulated spectra, produced by running snicar with all possible combinations of 6 grain sizes, 5 densities, 8 dust concentrations and 10 algal concentrations. 
 
 ### Missing pixel interpolation
 Images where pixels have been masked out using the CloudMask (the sensivity of which is controlled by the user-defined variable cloudCoverThreshold) can have those pixels infilled using 2D nearest neighbour interpolation by toggling the "interpolate_cloud" option in the template. However, this is very slow, and as an alternative, the cloudy pixels can be infilled using the layer median. The median-infill is the version used in the current version to make the code run in an acceptable amount of time.
@@ -150,7 +187,7 @@ There is an option to toggle interpolation on/off. If interpolation is toggled o
 
 ### Energy Balance Modelling
 
-TOGGLED OFF BY DEFAULT
+TOGGLED OFF BY DEFAULT - limited usefulness with elevation and meteorological inputs held constant across entire tile. However, this is an abvious development opportunity for future versions - the relevant met data are provided in this repository.
 
 There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 12 mins on 64 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
 
@@ -193,8 +230,27 @@ This likely results from a path error, check that the folder structure on the ma
 ### ... config.read_file(open(sys.argv[1])) IndexError: list index out of range
 This error most likely indicates that run_classifier.py is being run from the terminal wihout specifying the .template file or that there is a problem with the .template file. Perhaps the template file name has been typed incorrectly.
 
+## Tests
+
+Testing of this code was awkward in some ways because there is minimal existing data that can act as "ground truth" to compare against. This means the tests simply check that the code produces the correct files, containing outputs that are correctly formatted with the right data types, shapes and that they follow the expected flow through the pipeline. The resulting maps were assessed qualitatively, rather than making quantitative assessments against known ground truth values, because there are none available.
+
+### Unit testing
+
+Individual functions were always tested with selected dates from tileID 22wev in separate external scripts before the functions were integrated into the main project scripts. The results of these tests are not presented here because there is simply too much and the results have not always been archived once the function has been included in the main project.
+
+### Integration/system testing 
+
+Integration testing has been conducted regularly whenever significant changes have been made to the main projct scripts. This has usually been done by toggling OFF the slower, more computationally demanding functions (e.g. rtm inversion) to create a smaller, faster test environment. This has usually been sufficient for eliminating integration-level bugs because the main data flows in and out of the functions that are toggled ON are generally identical to a full run with all functions ON, and the reduced computational time allows testing across multiple tiles, months and years without accumulating too much billable VM time. The full workflow with all functions ON was then tested under a smaller set of tiles, months and years.
+
+Configs used for system tests: 
+multi-tile tests: ["22wev", "22web"]; 
+multi-month tests: [6,7,8]; 
+multi-tile, multi-month: ["22wev","22web"][6,7]
+full pipeline: ["22wev"]["2016"],[6,7,8]
+
 
 ## Development notes
+
 To test a full run without downloading files from blob, comment out lines 196 - 202 in sentinel2_azure.py. This prevents the call to download the files from blob and will simply run the function on the files already present in the process_dir. Obviously this only works for single tiles and will not iterate over multiple tiles. Might be a good idea to start a devlopemnt version that retrieves tiles locally instead of from blob storage to help speed up testing.
 
 Dec 19th 2019: VM disk space being used up. Changed workflow so that .nc files are uploaded to blob storage and deleted from local storage on creation. Deactivated summary statistics and dataset concatenation functions with the intention of calling these separately post-hoc, i.e. populate blob storage using VM then later download, concatenate and analyse datasets locally to save expensive compute time on VM. Unsurprisingly introducing uploads to blob storage has slowed down the script somewhat. Expect approximately 1.5 hours per tile for the complete sequence including EB modelling, cloudy pixel interpolation (NN or RBF) and snicar inversion function.
@@ -206,6 +262,8 @@ March 2020: added 1TB disk to VM - named "datadrive". BISC code now run from dat
 March 2020: updated outputs. Now collates individual tiles into a multifile xarray dataset and saves to netcdf. Data summary is also saved as netcdf in the output folder. Much neater and more navigable output file structure.
 
 April 2020: revised cloud interpolation - now infills cloud NaNs with the layer median value rather than a 2D nearest neighbour or RBF function because the latter options were prohibitively slow. When the rest of the processing takes ~7 mins, it is not worth waiting >30 mins for infilling cloudy pixels. This can probably be improved in future.
+
+April 2020: system test revealed bug in multi-year runs. The interpolate_missing_date() function fails when iterating over multiple years or tiles other than 22wev. Need to investigate why this is happening. UPDATE: Fixed for multiple tiles - issue was accidental hardcoding of tile-specific folder in filepath.
 
 
 ## Contributions
