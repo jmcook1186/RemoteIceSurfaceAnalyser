@@ -166,7 +166,7 @@ Run `python run_classifier.py <template.template>`.
 
 ### Classification
 
-The classifier assigns one of 6 surface type labels to each pixel. This is achieved using a random forest classifier trained on field spectroscopy data and validated using multispectral imagery acquired from a UAV flown over the surface of the Greenland Ice Sheet in summer 2017 and 2018. See Cook et al. (2020): Glacier algae accelerate melting on the SW Greenland Ice Sheet, The Cryosphere (https://doi.org/10.5194/tc-14-309-2020)
+The classifier assigns one of 6 surface type labels to each pixel. This is achieved using a random forest classifier trained on field spectroscopy data and validated using multispectral imagery acquired from a UAV flown over the surface of the Greenland Ice Sheet in summer 2017 and 2018. See Cook et al. (2020): Glacier algae accelerate melting on the SW Greenland Ice Sheet, The Cryosphere (https://doi.org/10.5194/tc-14-309-2020). This repository includes a new model trained on an updated spectral database with spectra collected on Foxfonna, Svalbard in summer 2019 following the fiels spectroscopy protocols described in Cook et al. (2017, 2020).
 
 ### Albedo
 
@@ -236,17 +236,17 @@ Testing of this code was awkward in some ways because there is minimal existing 
 
 ### Unit testing
 
-Individual functions were always tested with selected dates from tileID 22wev in separate external scripts before the functions were integrated into the main project scripts. The results of these tests are not presented here because there is simply too much and the results have not always been archived once the function has been included in the main project.
+Individual functions were always tested with selected dates from tileID 22wev in separate external scripts before the functions were integrated into the main project scripts. This tile was used for initial unit testing because it is the one I a most familiar with in terms of the image content and it is easier to spot potential issues. There should be no reason why functions that run successfully on 22wev should not run successfully on any other tile that passes the system's quanlity control since the size and format of all the tiles is identical. The results of these tests are not presented here because there is simply too much and the results have not always been archived once the function has been merged into the main project.
 
 ### Integration/system testing 
 
-Integration testing has been conducted regularly whenever significant changes have been made to the main projct scripts. This has usually been done by toggling OFF the slower, more computationally demanding functions (e.g. rtm inversion) to create a smaller, faster test environment. This has usually been sufficient for eliminating integration-level bugs because the main data flows in and out of the functions that are toggled ON are generally identical to a full run with all functions ON, and the reduced computational time allows testing across multiple tiles, months and years without accumulating too much billable VM time. The full workflow with all functions ON was then tested under a smaller set of tiles, months and years.
+Integration testing has been conducted regularly whenever significant changes have been made to the main project scripts. This has usually been done by toggling OFF the slower, more computationally demanding functions (e.g. rtm inversion) to create a smaller, faster test environment. This has usually been sufficient for eliminating integration-level bugs because the main data flows in and out of the functions that are toggled ON are generally identical to a full run with all functions ON, and the reduced computational time allows testing across multiple tiles, months and years without accumulating too much billable VM time. After these smaller integration tests, the full pipeline was run for all six tiles for the JJA days in 2016 and 2017. This was done three times in order to eliminate some minor system-level bugs, the third system test ran bug-free and produced all expected output datasets, correctly labelled and uploaded into cloud storage, that all passed qualitative data validation.
 
 Configs used for system tests: 
 multi-tile tests: ["22wev", "22web"]; 
 multi-month tests: [6,7,8]; 
-multi-tile, multi-month: ["22wev","22web"][6,7]
-full pipeline: ["22wev"]["2016"],[6,7,8]
+multi-tile, multi-month: ["22wev", "22wet"][6,7,8]
+full pipeline: ["22wev", "22web", "22wet", "22weu", "22wea", "22wec"]["2016", "2017"],[6,7,8]
 
 
 ## Development notes

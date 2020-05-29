@@ -1,0 +1,37 @@
+
+*** INFO ***...
+
+scikit-learn Random Forest Model
+64 trees, 80:20 training:test split
+
+Model trained on 280 spectra on 30/04/2020
+
+Class counts in test set = 
+
+HA: 17
+LA: 9
+CI: 11
+CC: 2
+WAT: 8
+SN: 9
+
+total = 56 spectra = 20% of 280 in total dataset
+
+
+ *** PERFORMANCE ON TRAINING SET *** 
+Model Performance 
+ 
+Random Forest accuracy =  0.9910313901345291 
+Random Forest F1 Score =  0.9910596525605757 
+Random Forest Recall =  0.9910313901345291 
+Random Forest Precision =  0.9916499149528375 
+average of all metrics =  0.9910408109432113
+
+ *** PERFORMANCE ON TEST SET *** 
+Model Performance 
+ 
+Random Forest accuracy =  0.9285714285714286 
+Random Forest F1 Score =  0.9276429710640237 
+Random Forest Recall =  0.9285714285714286 
+Random Forest Precision =  0.9415584415584416 
+average of all metrics =  0.928261942735627

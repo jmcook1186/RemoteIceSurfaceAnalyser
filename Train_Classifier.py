@@ -107,8 +107,8 @@ plt.ioff()
 # DEFINE FUNCTIONS
 def set_paths():
 
-    savefig_path = '/home/joe/Desktop/'
-    hcrf_file = '/home/joe/Code/HCRF_master_161718.csv'
+    savefig_path = '/home/joe/Code/BigIceSurfClassifier/Training_Data/'
+    hcrf_file = '/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv'
 
     return hcrf_file, savefig_path
 
@@ -156,20 +156,34 @@ def create_dataset(hcrf_file, save_spectra):
                '27_7_16_SITE2_ICE2', '27_7_16_SITE2_ICE4', '27_7_16_SITE2_ICE6',
                '5_8_16_site2_ice1', '5_8_16_site2_ice2', '5_8_16_site2_ice3',
                '5_8_16_site2_ice4', '5_8_16_site2_ice6', '5_8_16_site2_ice8',
-               '5_8_16_site3_ice1', '5_8_16_site3_ice4']
+               '5_8_16_site3_ice1', '5_8_16_site3_ice4', 
+                'fox11_25_',	'fox11_2_', 'fox11_7_', 'fox11_8_', 'fox13_1b_', 'fox13_2_',
+                'fox13_2a_', 'fox13_2b_', 'fox13_3_', 'fox13_3a_',
+               'fox13_3b_', 'fox13_6a_', 'fox13_7_', 'fox13_7a_', 'fox13_7b_', 'fox13_8_',	
+               'fox13_8a_', 'fox13_8b_', 'fox14_2b_', 'fox14_3_', 'fox14_3a_', 'fox17_8_',
+               'fox17_8a_', 'fox17_8b_', 'fox17_9b_', 'fox24_17_']
 
     CCsites = ['DISP1', 'DISP2', 'DISP3', 'DISP4', 'DISP5', 'DISP6', 'DISP7', 'DISP8',
                'DISP9', 'DISP10', 'DISP11', 'DISP12', 'DISP13', 'DISP14', '27_7_16_SITE3_DISP1',
                '27_7_16_SITE3_DISP3']
 
-    WATsites = ['21_7_SB5', '21_7_SB8', 'WAT_1', 'WAT_3', 'WAT_6']
+    WATsites = ['21_7_SB5', '21_7_SB8', 'WAT_1', 'WAT_3', 'WAT_6', 'fox14_8_', 'fox14_8a_', 'fox14_8b_',
+                'fox17_5_', 'fox17_5a_', 'fox17_5b_', 'fox17_5c_', 'fox17_6d_', 'fox17_6e_', 'fox17_6f_',
+                'fox17_9_', 'fox17_m1_', 'fox17_m2_', 'fox17_m3_', 'fox17_m4_', 'fox17_m5_', 'fox21_10_',
+                'fox21_17_', 'fox21_18_', 'fox21_19_', 'fox21_28_', 'fox24_8_', 'fox24_8a_', 'fox24_8b_',
+                'fox11_16_', 'fox11_17_', 'fox11_18_','fox11_19_', 'fox11_1_','fox11_20_',]
 
     SNsites = ['14_7_S4', '14_7_SB6', '14_7_SB8', '17_7_SB2', '27_7_16_KANU_', '27_7_16_SITE2_1',
                '5_8_16_site1_snow10', '5_8_16_site1_snow2', '5_8_16_site1_snow3',
                '5_8_16_site1_snow4', '5_8_16_site1_snow6', '5_8_16_site1_snow7',
                '5_8_16_site1_snow9', '2018-07-24_D8', '2018-07-24_D9', '2018-07-24_D8', '2018-07-24_D7', '2018-07-24_T1',
                '2018-07-23_D1', '2018-07-23_D2', '2018-07-23_D3', '2018-07-23_D4', '2018-07-23_D5', '2018-07-23_T1',
-               '2018-07-23_T2', '2018-07-23_T3', '2018-07-23_T4', '2018-07-23_T5']
+               '2018-07-23_T2', '2018-07-23_T3', '2018-07-23_T4', '2018-07-23_T5',
+               'fox15_4_', 'fox15_4a_', 'fox15_4b_', 'fox15_5_', 'fox15_5a_', 'fox15_5b_', 'fox15_7a_', 'fox15_7b_',
+               'fox15_8a_', 'fox15_F7_', 'fox17_3a_', 'fox17_3b_', 'fox17_6_', 'fox17_6a_', 'fox17_6b_', 'fox17_6c_']
+
+
+              
 
     # Create dataframes for ML algorithm
 
@@ -205,27 +219,27 @@ def create_dataset(hcrf_file, save_spectra):
 
         fig = plt.figure(figsize=(10, 10))
         ax1 = fig.add_subplot(321)
-        ax1.plot(WL, HA_hcrf), plt.xlim(350, 2000), plt.ylim(0, 1.2), plt.title('HA'), plt.xlabel(
+        ax1.plot(WL, HA_hcrf), plt.xlim(350, 1400), plt.ylim(0, 1.2), plt.title('HA'), plt.xlabel(
             'Wavelength (nm)'), plt.ylabel('HCRF')
         ax1.set_title('Hbio')
         ax2 = fig.add_subplot(322)
-        ax2.plot(WL, LA_hcrf), plt.xlim(350, 2000), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
+        ax2.plot(WL, LA_hcrf), plt.xlim(350, 1400), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
             'Wavelength (nm)'), plt.ylabel('HCRF')
         ax2.set_title('Lbio')
         ax3 = fig.add_subplot(323)
-        ax3.plot(WL, CI_hcrf), plt.xlim(350, 2000), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
+        ax3.plot(WL, CI_hcrf), plt.xlim(350, 1400), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
             'Wavelength (nm)'), plt.ylabel('HCRF')
         ax3.set_title('Clean ice')
         ax4 = fig.add_subplot(324)
-        ax4.plot(WL, CC_hcrf), plt.xlim(350, 2000), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
+        ax4.plot(WL, CC_hcrf), plt.xlim(350, 1400), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
             'Wavelength (nm)'), plt.ylabel('HCRF')
         ax4.set_title('Cryoconite')
         ax5 = fig.add_subplot(325)
-        ax5.plot(WL, WAT_hcrf), plt.xlim(350, 2000), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
+        ax5.plot(WL, WAT_hcrf), plt.xlim(350, 1400), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
             'Wavelength (nm)'), plt.ylabel('HCRF')
         ax5.set_title('Water')
         ax6 = fig.add_subplot(326)
-        ax6.plot(WL, SN_hcrf), plt.xlim(350, 2000), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
+        ax6.plot(WL, SN_hcrf), plt.xlim(350, 1400), plt.ylim(0, 1.2), plt.title('LA'), plt.xlabel(
             'Wavelength (nm)'), plt.ylabel('HCRF')
         ax6.set_title('Snow')
         plt.tight_layout()
@@ -431,7 +445,7 @@ def split_train_test(X, test_size=0.2, n_trees= 64, print_conf_mx = True, savefi
 
     if pickle_model:
         # pickle the classifier model for archiving or for reusing in another code
-        joblibfile = str('/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifier.pkl')
+        joblibfile = str('/home/joe/Code/IceSurfClassifiers/Sentinel_Resources/Sentinel2_classifierTest.pkl')
         joblib.dump(clf, joblibfile)
 
         # to load this classifier into another code use the following syntax:
@@ -447,5 +461,5 @@ hcrf_file, savefig_path = set_paths()
 X = create_dataset(hcrf_file, save_spectra = True)
 
 #optimise and train model
-#clf = split_train_test(X, test_size=0.3, n_trees=32, print_conf_mx=True, savefigs=False, show_model_performance=True, pickle_model=False)
+clf = split_train_test(X, test_size=0.2, n_trees=64, print_conf_mx=True, savefigs=True, show_model_performance=True, pickle_model=True)
 
