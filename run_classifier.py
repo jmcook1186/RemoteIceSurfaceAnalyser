@@ -228,7 +228,7 @@ for tile in tiles:
                     side_lengths = [[3000,3000,3000,3000,3000],[5000,5000,5000,5000,5000],[7000,7000,7000,7000,7000],[9000,9000,9000,9000,9000],[12000,12000,12000,12000,12000],[15000,15000,15000,15000,15000]]
                     densities = [[400,400,400,400,400],[500,500,500,500,500],[600,600,600,600,600],[700,700,700,700,700],[800,800,800,800,800]]
                     algae = [[0,0,0,0,0],[5000,0,0,0,0],[10000,0,0,0,0],[20000,0,0,0,0],[30000,0,0,0,0],[50000,0,0,0,0],[75000,0,0,0,0],[100000,0,0,0,0],[150000,0,0,0,0],[175000,0,0,0,0],[200000,0,0,0,0]]
-                    dust = [[0,0,0,0,0],[5000,0,0,0,0],[10000,0,0,0,0],[20000,0,0,0,0],[30000],[50000,0,0,0,0],[75000,0,0,0,0],[100000,0,0,0,0]]
+                    dust = [[0,0,0,0,0],[5000,0,0,0,0],[10000,0,0,0,0],[20000,0,0,0,0],[30000,0,0,0,0],[50000,0,0,0,0],[75000,0,0,0,0],[100000,0,0,0,0]]
                     wavelengths = np.arange(0.3,5,0.01)
                     idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
                     print("LUT length = ",len(side_lengths)*len(densities)*len(dust)*len(algae))
@@ -318,7 +318,7 @@ for tile in tiles:
                     dataset = sentinel2_tools.cloud_interpolator(dataset)
 
                 # send dataset to netcdf file
-                dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w')
+                dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w', format='NETCDF4_CLASSIC')
 
                 # flush dataset from disk
                 dataset = None
