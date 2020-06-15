@@ -153,7 +153,6 @@ class AzureAccess:
         """
         This function is for uploading the output spatial datasets to blob storage and deleting them from local storage.
         This was introduced because running averything locally was using up all avaolable disk space on the VM.
-
         """        
 
         print("\nUploading netCDF to blob storage\n")
@@ -234,21 +233,48 @@ class AzureAccess:
         for blob in generator:
             bloblist.append(blob.name)
 
+
         # filter total bloblist to just jp2s, then just for the specified date
         filtered_by_type = [string for string in bloblist if '_20m.jp2' in string]
-        filtered_bloblist = [string for string in filtered_by_type if str("L2A_" + date) in string]
+        filtered_bloblist = [string for string in filtered_by_type if date in string]
 
 
-        # download the files in the filtered list
-        for i in filtered_bloblist:
-            print(i)
-            try:
-                self.block_blob_service.get_blob_to_path(tile,
-                                             i, str(img_path+i[-38:-4]+'.jp2'))
-            except:
-                print("download failed {}".format(i))
+        # Set up download loop for obtaining files for correct tile and date
+        # Note that this i done inside an if/else statement that uses a different loop
+        # depending whether the year is before or after 2017. This is because the file naming
+        # convention changed slightly for the 2018 files, requiring a different string
+        # extraction. I think the loop for 2018, 2019, 2020 will now actually work for all
+        # dates but not yet properly tested, so this slightly ugly workaround persists for now.
 
-            # index to -38 because this is the filename without paths to folders etc
+        if (date[0:4] == '2018') | (date[0:4] == "2019") | (date[0:4] == "2020"):
+
+            # print(filtered_by_type)
+            print("FILTERED BLOBLIST")
+            print(filtered_bloblist)
+
+            # download the files in the filtered list
+            for i in filtered_bloblist:
+
+                try:
+                    self.block_blob_service.get_blob_to_path(tile,
+                                                i, str(img_path+i[65:-4]+'.jp2'))
+                
+                except:
+                    print("ERROR IN DOWNLOADS")
+
+
+        else:
+
+            # download the files in the filtered list
+            for i in filtered_bloblist:
+                print(i)
+                try:
+                    self.block_blob_service.get_blob_to_path(tile,
+                                                i, str(img_path+i[-38:-4]+'.jp2'))
+                except:
+                    print("download failed {}".format(i))
+
+                # index to -38 because this is the filename without paths to folders etc
 
         # Check downloaded files to make sure all bands plus the cloud mask are present in the wdir
         # Raises download flag (Boolean true) and reports to console if there is a problem

@@ -157,7 +157,7 @@ class SurfaceClassifier:
         stackedT = stackedT.chunk(20000,9)
 
         # reformat LUT: flatten LUT from 3D to 2D array with one column per combination of RT params, one row per wavelength
-        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT.npy')).reshape(2160,len(wavelengths))
+        LUT = np.load(str(os.environ['PROCESS_DIR'] + 'SNICAR_LUT.npy')).reshape(2640,len(wavelengths))
 
         # find most similar LUT spectrum for each pixel in S2 image
         # astype(float 16) to reduce memory allocation (default was float64)
@@ -224,51 +224,7 @@ class SurfaceClassifier:
 
         return
 
-    def run_ebmodel(self, alb):
-        
-        """
-        Not functional in current version - can be toggled on - and it will run successfully - but all 
-        input values other than albedo are held constant.
-        
-        """
-           ## Input Data, as per first row of Brock and Arnold (2000) spreadsheet
-            lat = 67.0666
-            lon = -49.38
-            lon_ref = 0
-            summertime = 0
-            slope = 1.
-            aspect = 90.
-            elevation = 1020.
-            albedo = alb
-            roughness = 0.005
-            met_elevation = 1020.
-            lapse = 0.0065
-
-            day = 202
-            time = 1200
-            inswrad = 571
-            avp = 900
-            airtemp = 5.612
-            windspd = 3.531
-
-            SWR,LWR,SHF,LHF = ebm.calculate_seb(lat, lon, lon_ref, day, time, summertime, slope, aspect, elevation,
-                                                met_elevation, lapse, inswrad, avp, airtemp, windspd, albedo, roughness)
-
-            sw_melt, lw_melt, shf_melt, lhf_melt, total = ebm.calculate_melt(
-                SWR,LWR,SHF,LHF, windspd, airtemp)
-
-            # flush memory
-            sw_melt = None
-            lw_melt = None
-            shf_melt = None
-            lhf_melt = None
-            SWR = None
-            LWR = None
-            SHF = None
-            LHF = None
-
-            return total
-
+ 
 
     def albedo_report(self, tile, date, savepath):
         
