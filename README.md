@@ -4,25 +4,22 @@ This repository contains in-development code for automated downloading, processi
 
 The South Western Greenland Ice Sheet Dark Zone is contained within the following five tiles, spanning 64 - 70 degrees N:
 
-22wev
-22web
-22wec
-22wet
-22weu
+22WEA, 22WEB, 22WEC, 22WET, 22WEU, 22WEV
 
 ## Setup
 
 ### Hardware
-The computational requirements of this script vary depending upon which functions are toggled on/off. The script is generally suitable for running on a powerful laptop/desktop as we have been tried to keep as much out of memory as possible, only loading arrays into memory when really necessary. However, the invert_snicar() function is computationally demanding - taking several hours to complete on my laptop. If using the invert_snicar() function an HPC resource is recommended. I have been running the full pipeline on a 72 core Azure Linux Data Science Machine (Fs72), in which case one tile takes ~7 mins to process, and a full month can be processed in about an hour. In Nov 2019, the VM cost is ~£3/hour.
+
+The computational requirements of this script vary depending upon which functions are toggled on/off. We have been tried to keep as much of the processing out of memory as possible, only loading arrays when unavoidable. We have also made extensive use of Dask for distributing the work over the available processing cores, so significant acceleration will be experienced when this software is run of machines with more available cores. We have been using a Microsoft Azure Linux Data Science Machine with 72 processing cores (ID = Fs72). The cost for this virtual machine is ~£3/hour. Once the main processing had been achieved we continued to use an Azure VM for the data analysis but since we had less need for large multi-core processing we resized to a 16 core E16s which cost ~90p/hour. Maintaining a smaller VM rather than doing the data analysis locally was preferred because of much easier and faster access to the large amount of output data (2.4 TB) stored remotely in Azure storage blobs. By far the most time consuming step in the pipeline is the uploading of output data to blob storage, the slowest part of the actual processing pipeline is the radiative transfer model inversion.
 
 ### Environment
 
-The environment can be set up manually using the following commands:
+We used Ubuntu 16.04 on a Microsoft Azure F72 Linux Data Science Machine with 128 GB RAM. Our code was written in Python 3.5 via Anaconda 4.5.11 and developed using VSCode 1.29.1. Our Python environment can be replicated as follows: 
 
     conda create -n IceSurfClassifier -c conda-forge python ipython xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
-    pip install azure sklearn-xarray sentinelsat dask[complete]
+    pip install azure sklearn-xarray sentinelsat dask
 
-or alternatively on a linux OS the environment can be built from environment.yaml using:
+or alternatively Ubuntu 16.04 users can configure the environment from environment.yaml using:
 
     conda env -f environment.yml
 
@@ -118,6 +115,14 @@ Big Ice Surf Classifier
 |----- .azure_secret
 |----- .cscihub_secret
 |
+|-----BISC_OUT
+|           |
+|           |---will be populated with .nc files
+|           |
+|           |---PROCESSED
+|                   |
+|                   |---will be populated with output csvs
+|
 |
 |-----Process_Dir
 |           |
@@ -138,10 +143,22 @@ Big Ice Surf Classifier
 |
 ```
 
+## Downloading and pre-processing S2 imagery
+
+To obtain the necessary Sentinel-2 imagery, we have provided a script download_process_s2.py. This requires the user to have an active Copernicus Open Data Hub account and the username and password should be stored in csci.secret in PROCESS_DIR. The desired tile and date range is defined in the template file (in our case swgris.template). The user can then run:
+
+```
+python download_process_s2.py swgris.template
+
+```
+This will trigger a batch download of the relevant files and automatically apply the Sen2Cor processor for atmospheric correction, georectification and reprojection. The necessary files from the L2A product are then extracted and uploaded to Azure blob storage (the user must define their azure storage account in a .secret file) while the rest of the L2A files and the original L1C files are all deleted. When the processing script is run, it retrieves the necessary files from the Azure blob containers.
+
+Note that since August 2019 any Sentinel-2 imagery older than 18 months is no longer immediately available from Copernicus and instead they are held in a long term storage repository called the LTA (long term archive). A request for a file in the LTA triggers the retrieval of the file server-side, making it available for later download. The process of retrieving the files from LTA can take between minutes and hours and they remain available for 3 days. This means download_process_s2.py will sometimes fail, but it will trigger the release of files from LTA, so the fix is simply to run it again later, possibly a few times, until the files are available for download.
+
+Also, note that the downloading sometimes fails on multi-month runs. I have not been able to diagnose why exactly this occurs but becaue the program does not crash or return any exceptions, it simply hangs at the end of each month, I suspect the issue is server-side. The workaround is to download one month's worth of imagery at a time.
 
 ## How to run
-
-There are two main steps: (1) pre-processing Sentinel-2 imagery, and (2) running the classification, albedo, snicar retrieval and spatial/temporal interpolation algorithms. These are configured by altering the template file.
+Once the desired imagery has been downloaded, processed and stored in an Azure container, the next step is running the classification, albedo, snicar retrieval and spatial/temporal interpolation algorithms. These are configured by altering the template file.
 
 Before you begin, make sure you have created a `template` file containing the settings for your desired workflow, and that you have set the environment variables needed by the workflow (see 'Setup' above).
 
@@ -149,18 +166,11 @@ If you have created the suggested bash shell script, then simply run:
 
     source setup_classifier.sh
 
-The configuration details will automatically be saved to a text file (BISC_Param_Log.txt). A list of the tile/date combinations that are discarded due to QC flags or download errors are saved to csv files (aborted_downloads.csv, rejected_by_qc.csv) and so is a list of all tile/date combinations successfully analysed (good_tiles.csv).
+To start the main program, run 
 
+`python run_classifier.py <template.template>`.
 
-### Pre-processing
-
-Run `python download_process_s2.py <template.template>`.
-
-
-### Processing
-
-Run `python run_classifier.py <template.template>`.
-
+The configuration details will automatically be saved to a text file (BISC_Param_Log.txt). A list of the tile/date combinations that are discarded due to QC flags or download errors are saved to csv files (aborted_downloads.csv, rejected_by_qc.csv) and so is a list of all tile/date combinations successfully analysed (good_tiles.csv). Output data will automatically upload to Azure storage containers (see "Outputs" below).
 
 ## Functionality
 
@@ -179,6 +189,7 @@ There is an option in the template file to retrieve ice surface parameters using
 Note that despite the LUT approach, the RTM inversion is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in about 7 minutes per tile. Increasing the size of the LUT increases the computation time. Currently the LUT comprises 2400 individual simulated spectra, produced by running snicar with all possible combinations of 6 grain sizes, 5 densities, 8 dust concentrations and 10 algal concentrations. 
 
 ### Missing pixel interpolation
+
 Images where pixels have been masked out using the CloudMask (the sensivity of which is controlled by the user-defined variable cloudCoverThreshold) can have those pixels infilled using 2D nearest neighbour interpolation by toggling the "interpolate_cloud" option in the template. However, this is very slow, and as an alternative, the cloudy pixels can be infilled using the layer median. The median-infill is the version used in the current version to make the code run in an acceptable amount of time.
 
 ### Missing date interpolation
@@ -187,9 +198,9 @@ There is an option to toggle interpolation on/off. If interpolation is toggled o
 
 ### Energy Balance Modelling
 
-TOGGLED OFF BY DEFAULT - limited usefulness with elevation and meteorological inputs held constant across entire tile. However, this is an abvious development opportunity for future versions - the relevant met data are provided in this repository.
+TOGGLED OFF BY DEFAULT - limited usefulness with elevation and meteorological inputs held constant across entire tile. However, this is an obvious development opportunity for future versions - the relevant met data are provided in this repository.
 
-There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 12 mins on 64 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
+There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 9 mins on 72 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
 
 
 # Outputs
@@ -207,9 +218,12 @@ Note that these data are opened using xarray's open_dataarray() function, not op
 ### Metadata
 There is a range of metadata output by the scripts, including text files detailing the model configuration, lists of tile/date that were analysed, those that were rejected by image quality control, and those generated by the interpolation function. These help to record the precise conditons under which the script was run.
 
-### Plotting
-Plotting is available via a specific external script that accesses the main output NetCDF files and returns jpeg images of user-defined variables on given dates.
+## Output Data Post-processing
+The script post-processing.py is available for wrangling the summary data. The main program saves two netCDF files to the Azure storage container for each tile/year. The first is simple summary statistics including the mean and standard deviation of the albedo, grain size, algal concentration, ice density, dust concentration and the retrieval date. The second contains the same metrics but divided by the surface class as predicted by the random forest classifier (ie mean albedo for HA, standard deviation of algal concentration for LA etc. etc.)
+The post-processing script concatenates all of this data into a convenient .csv file that can be easily interrogated using Pandas or exported to a spreadsheet program. These are automatically saved to /BigIceSurfClassifier/BISC_OUT/PROCESSED/.
 
+## Plotting
+Plotting is TBC- the full datasets for each variable for each tile and DOY occupy 2.4TB on disk, so some decisions must be made about what specifically to extract and plot. Aim to be completed by 01/07/20.
 
 ## Troubleshooting
 
@@ -217,6 +231,8 @@ Here are some of the possible exceptions, errors and gotchas that could be encou
 
 ### Azure and SentinelHub
 The user must have their own Azure account with blob storage access. The scripts here manage the creation of storage blobs and i/o to and from them, but this relies upon the user having a valid account name and access key saved in an external file ".azure_secret" in the process directory. The same is true of the copernicus science hub - the user must have a valid username and password stored in an external file ".cscihub_secret" saved in the process directory to enable batch downloads of Sentinel-2 images that are not already saved in blob storage.
+
+BEWARE since August 2019 Copernicus moved all products older than 18 months to a Long Term Archive (LTA). These products are not available for immediate download, meaning the download_process_s2.py script will fail initially. However, the request made by the script will trigger the product to be retrieved from the archive and made available some time "from minutes to hours" after the request is made. This means the script has to be re-run, likely multiple times, to get the product after it has been made available.
 
 ###   File "/...", line x, in load_img_to_xr, raise ValueError
 This error likely results from having surplus .jp2 images in the process directory. This can happen when a previous run was aborted before the clear_process_dir() function was run, or when the user has added files accidentally, because that can cause multiple files to be returned by the glob in the load_img_to_xr() function which should only return unique filenames. To resolve, clear the .jp2 files from the process directory and retry.
