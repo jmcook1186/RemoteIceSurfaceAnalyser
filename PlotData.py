@@ -8,7 +8,9 @@ from scipy import stats # For in-built method to get PCC
 from scipy.stats import shapiro
 from scipy.stats import chi2_contingency
 from scipy.stats import mstats
-import pingouin
+import statsmodels.formula.api as smf
+
+
 
 
 def import_csvs(filepath, DZ = True, Tiles = True, byClass = True):
@@ -282,18 +284,7 @@ def DZvars_with_errorbars(DZ, savepath):
     ax5.axvspan('2017-06-01','2017-08-30',color='red',alpha=0)
     ax5.axvspan('2018-06-01','2018-08-30',color='k',alpha=0.1)
     ax5.axvspan('2019-06-01','2019-08-30',color='red',alpha=0)
-    ax5.set_ylabel('Dust (ppb)',f
-    fig, ax = plt.subplots(1,1,figsize=(15,10))
-    ax.plot(DZ_Class.Date.astype(str),DZ_Class.ClassCountSN,color='y',linestyle='-.')
-    ax.plot(DZ_Class.Date.astype(str),DZ_Class.ClassCountCI,color='b')
-    ax.plot(DZ_Class.Date.astype(str),DZ_Class.ClassCountLA,color='r')
-    ax.plot(DZ_Class.Date.astype(str),DZ_Class.ClassCountHA,color='g')
-
-    ax.axvspan('2016-06-01','2016-08-30',color='k',alpha=0.1)
-    ax.axvspan('2017-06-01','2017-08-30',color='red',alpha=0)
-    ax.axvspan('2018-06-01','2018-08-30',color='k',alpha=0.1)
-    ax.axvspan('2019-06-01','2019-08-30',color='red',alpha=0)
-    ontsize=20)
+    ax5.set_ylabel('Dust (ppb)',fontsize=20)
     ax5.set_ylim(0,50000)
 
     every_nth = 5
@@ -935,12 +926,36 @@ def corr_heatmaps(DZ,DZ_Class,savepath):
 
     return
 
+def model_fits(var,degree, start, stop):
+    """
+    params:
+
+    - start, stop: index number for start and end of defined range
+    - degree: degree of polynomial to fit
+    - var: which variable to fit - pass DZ.var
+
+    returns:
+    
+    """
+    x = np.arange(start,stop,1)
+
+    y = var[start:stop]
+
+    coeffs = np.polyfit(x, y, 2)
+    model = np.poly1d(coeffs)
+    results = smf.ols(formula='y ~ model(x)', data=var).fit()
+
+    linresults = stats.linregress(x,y)
+
+    return coeffs, results, linresults
+
+
 # Function Calls
 
 filepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/'
 savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Figures_and_Tables/'
 
-# DZ, DZ_Class, wea, web, wec, wet, weu, wev = import_csvs(filepath,True,True)
+DZ, DZ_Class, wea, web, wec, wet, weu, wev = import_csvs(filepath,True,True)
 # AllTileVars(DZ, wea, web, wec, wet, weu, wev, savepath)
 # DZvars_with_errorbars(DZ, savepath)
 # correlate_vars(DZ)

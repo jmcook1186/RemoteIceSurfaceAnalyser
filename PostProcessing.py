@@ -5,12 +5,13 @@ import glob as glob
 import os
 import pandas as pd
 import datetime
+from re import search
 
 OutDataPath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Raw/*[0-9].nc'
 ClassDataPath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Raw/*byClass.nc'
+savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/'
 
-
-def process_from_nc(OutDataPath, ClassDataPath, byClass=False):
+def process_from_nc(savepath, OutDataPath, ClassDataPath, byClass=False):
     # set paths for grabbing correct files - either by class or totals
     
     if not byClass:
@@ -22,8 +23,10 @@ def process_from_nc(OutDataPath, ClassDataPath, byClass=False):
         for i in DataList:
             
             # grab tile and year from filename
-            tile = i[53:58]
-            year = i[59:63]
+            tile = i[57:62]
+            year = i[63:67]
+            
+            print(tile,"   ", year)
 
             # open file using xarray and convert to multi-indexed dataframe
             file = xr.open_dataarray(i)
@@ -56,18 +59,93 @@ def process_from_nc(OutDataPath, ClassDataPath, byClass=False):
                 varcounter +=1
             
             OutDF['Date'] = dates
-            OutPath = str('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/' + tile + "_" + year + "_" + 'processed.csv')
+            OutPath = str(savepath + tile + "_" + year + "_" + 'processed.csv')
             OutDF.to_csv(OutPath,index=False)
+        
 
     else: 
-        # REQUIRES CODE FOR PROCESSING CLASS DATA HERE!!!!!
+        # PROCESS NETCDFs FOR CLASS DATA
+        DataPath = ClassDataPath
+        DataList = glob.glob(DataPath)
+ 
+        for i in DataList:
+
+            OutDF = pd.DataFrame()
+                        
+            # grab tile and year from filename
+            tile = i[59:62]
+            year = i[63:67]
+
+            print(tile,"  ", year)
+
+            # open file using xarray and convert to multi-indexed dataframe
+            file = xr.open_dataarray(i)
+            DF = file.to_dataframe(name='DF')
+            
+            variables = DF.index.levels[0]
+            dates = DF.index.levels[1]
+            classes = DF.index.levels[2]
+
+            OutDF['Date'] = dates
+
+            for var in variables:
+                for cl in classes:
+                    
+                    if (cl != 'None') & ("Albedo" not in var):
+                        temp = []
+                        colname = str(var+cl)
+                        
+                        for date in dates:
+                            val= float(DF.loc[(var,date,cl)].values)
+                            temp.append(val)
+                    
+                        OutDF[colname] = temp
+
+            OutDF.to_csv(str(savepath+'CLASSDATA_'+ tile + '_'+year+'.csv'),index=False)                        
+
+        # NOW CONCATENATE INDIVIDUAL YEARS INTO SINGLE DFs FOR EACH TILE
+        CsvList = glob.glob(savepath+'CLASSDATA*')
+
+        for tile in ['wea','web','wec','wet','weu','wev']:
+            TileList = []
+            dataframes = []
+            for i in CsvList:
+                if tile in i:
+                    TileList.append(i)
+            
+            for file in TileList:
+                    df = pd.read_csv(file)
+                    dataframes.append(df)
+                    result = pd.concat(dataframes, ignore_index=True)
+            result.to_csv(str(savepath+tile+'_ClassData.csv'),index=False)
+
+        # NOW TAKE AVERAGE VALUES ACROSS ALL TILES = WholeDZ
         
-        pass
+        CsvList = glob.glob(savepath+"*ClassData.csv")
+        columns = pd.read_csv(CsvList[0]).columns
+        DZ = pd.DataFrame(columns = columns)
 
-    
-    
-    print("NETCDFs converted successfully \n.csvs now available in PROCESSED folder")
+        for column in columns:
 
+            temp = pd.DataFrame()
+
+            if search('NONE',column):
+                print('BAD COLUMN')
+            elif search('Date',column):
+                print('BAD COLUMN')
+            else:
+
+                for i in CsvList:
+                    ID = i[-17:-14]
+                    df = pd.read_csv(i)
+                    df = df.fillna(0)
+                    temp[ID] = df[column]
+                DZ[column] = temp.mean(axis=1,skipna = True)
+            
+        DZ.to_csv(savepath+'WholeDZ_byClass.csv')
+
+        print("NETCDFs converted successfully \n.csvs now available in PROCESSED folder")
+        
     return
 
 
@@ -128,6 +206,14 @@ def add_DOYcolumn():
     wevDF['DOY'] = wevDF['Date'].dt.dayofyear
     wevDF.to_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/22wev.csv')
     
+    DZ_class = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/WholeDZ_byClass.csv',index_col=False)
+    DZ_class = DZ_class.sort_values(by='Date').reset_index(drop=True)
+    DZ_class['Date'] = pd.to_datetime(DZ_class['Date'].astype(str), format='%Y/%m/%d')
+    DZ_class['DOY'] = DZ_class['Date'].dt.dayofyear
+    DZ_class.to_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/WholeDZ_byClass.csv')
+    
+    
+
     return
 
 def combine_darkzone():
@@ -204,7 +290,7 @@ def clear_temp_files(clearOutData= False,clearClassData = False, clearCSVs = Fal
     return
 
 
-process_from_nc(OutDataPath, ClassDataPath, byClass = False)
+process_from_nc(savepath, OutDataPath, ClassDataPath, byClass = False)
 combineCSVs_byTile()
 add_DOYcolumn()
 meanDF = combine_darkzone()
