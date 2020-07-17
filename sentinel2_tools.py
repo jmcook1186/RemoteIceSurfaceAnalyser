@@ -183,7 +183,7 @@ def format_mask(img_path, Icemask_in, Icemask_out, cloudProbThreshold):
     :return Icemask: Boolean to mask out pixels outside the ice sheet boundaries
     :return Cloudmask: Boolean to mask out pixels obscured by cloud
     """
-    cloudmaskpath_temp = glob.glob(str(img_path + '*CLD*_20m.jp2')) # find cloud mask layer in filtered S2 image directory
+    cloudmaskpath_temp = glob.glob(str(img_path + '*CLD*'+'*_20m.jp2')) # find cloud mask layer in filtered S2 image directory
     cloudmaskpath = cloudmaskpath_temp[0]
 
     mask = gdal.Open(Icemask_in)
@@ -274,7 +274,7 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
         print('good = {}%, bad = {}%'.format(useable_area,unuseable_area))
 
     # report to console
-    print(f"{np.round(useable_area,2)} % of the image is composed of useable pixels")
+    print("{} % of the image is composed of useable pixels".format(np.round(useable_area,2)))
     print("FINISHED QC CHECKS")
 
     # raise flags
@@ -357,7 +357,7 @@ def imageinterpolator(years, months, tile, proj_info):
 
     for Missing in MissingDates:
 
-        print(f"\nGenerating data for DOY {Missing}")
+        print("\nGenerating data for DOY {}".format(Missing))
         # for each missing date find the nearest past and future "good" images in the repo
         temp = DOYlist - Missing  # subtract the missing DOY from each DOY in the image repo
         closestPast = DOYlist[np.where(temp < 0, temp, -9999).argmax()]  # find the closest image from the past
@@ -372,11 +372,11 @@ def imageinterpolator(years, months, tile, proj_info):
                                                  '%y%j').date().strftime('%Y%m%d')  # convert to string format
         
         # report past, missing and future dates to console
-        print(f"closestPast = {closestPastString}, closestFuture = {closestFutureString}")
+        print("closestPast = {}, closestFuture = {}".format(closestPastString,closestFutureString))
         
         if (closestPastString > seasonStart) and (closestFutureString < seasonEnd): # greater than == nearer to present,
             # ensures interpolation does not try to go outside of available dates
-            print(f"skipping date ({closestPastString} or {closestFutureString} out of range)")
+            print("skipping date ({} or {} out of range)".format(closestPastString,closestFutureString))
 
         else:
 
@@ -386,8 +386,8 @@ def imageinterpolator(years, months, tile, proj_info):
             imageFuture = xr.open_dataset(str(
                 os.environ['PROCESS_DIR']+'/outputs/' + tile + '/' + tile + '_' + closestFutureString + '_Classification_and_Albedo_Data.nc'))
 
-            # conditionally include or exclude grain size, density, dust and algae 
-            if config.get('options','retrieve_snicar_params')=='True':
+            # conditionally include or exclude grain size, density and algae 
+            if config.get('options','retrieve_disort_params')=='True':
 
                 # extract the past and future albedo and classified layers.
                 albPast = imagePast.albedo.values
@@ -398,8 +398,6 @@ def imageinterpolator(years, months, tile, proj_info):
                 grainFuture = imageFuture.grain_size.values
                 densityPast = imagePast.density.values
                 densityFuture = imageFuture.density.values
-                dustPast = imagePast.dust.values
-                dustFuture = imageFuture.dust.values
                 algaePast = imagePast.algae.values
                 algaeFuture = imageFuture.algae.values
 
@@ -408,11 +406,10 @@ def imageinterpolator(years, months, tile, proj_info):
                 maskFuture = np.isnan(albFuture)
                 combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
-                filenames = ['albedo','class','grain', 'density', 'dust', 'algae']
+                filenames = ['albedo','class','grain', 'density', 'algae']
                 counter = 0
-                
                 # loop through params calculating linear regression
-                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(dustPast,dustFuture),(algaePast,algaeFuture)]:                 
+                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(algaePast,algaeFuture)]:                 
 
                     if counter == 1: # different function required for classification as it is not a continuous scale
                         
@@ -420,7 +417,7 @@ def imageinterpolator(years, months, tile, proj_info):
                         # so first calculate change in albedo
                         albedoDiffs = albPast - albFuture
                         albedoDiffs = albedoDiffs*0.5
-                        albedoDiffsPredicted = albAPast - newImage
+                        albedoDiffsPredicted = albPast - newImage
 
                         newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, 
                         classFuture, classPast)
@@ -433,6 +430,7 @@ def imageinterpolator(years, months, tile, proj_info):
                         newClassImage = None
                         newClassImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+'interpolated_{}.nc'.format(filenames[counter])), mode='w')
                         newClassImagexr = None
+                        counter +=1
 
                     else:
                         slopes = (i - j) / (closestFuture - closestPast)
@@ -446,7 +444,7 @@ def imageinterpolator(years, months, tile, proj_info):
                         newImage = newImage.filled(np.nan)
                         newImage = abs(newImage)
 
-                        if counter ==0: # for albedo layer, ensure values in range
+                        if counter == 0: # for albedo layer, ensure values within range
                             newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
                             newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
                         
@@ -459,27 +457,25 @@ def imageinterpolator(years, months, tile, proj_info):
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc')) as surfclass:
                         with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc')) as grain:
                             with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc')) as density:
-                                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dust.nc')) as dust:
-                                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc')) as algae:
-
-                                        # collate data into xarray dataset and copy metadata from PAST
-                                        newXR = xr.Dataset({
-                                            'classified': (['x', 'y'], surfclass.values),
-                                            'albedo': (['x', 'y'], albedo.values),
-                                            'grain_size': (['x', 'y'], grain.values),
-                                            'density': (['x', 'y'], density.values),
-                                            'dust': (['x', 'y'], dust.values),
-                                            'algae': (['x', 'y'], algae.values),
-                                            'Icemask': (['x', 'y'], imagePast.Icemask),
-                                            'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                                            'FinalMask': (['x', 'y'], combinedMask),
-                                            proj_info.attrs['grid_mapping_name']: proj_info,
-                                            'longitude': (['x', 'y'], imagePast.longitude),
-                                            'latitude': (['x', 'y'], imagePast.latitude)
-                                        }, coords = {'x': imagePast.x, 'y': imagePast.y})
+                                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc')) as algae:
+                                        
+                                    # collate data into xarray dataset and copy metadata from PAST
+                                    newXR = xr.Dataset({
+                                        'classified': (['x', 'y'], surfclass.values),
+                                        'albedo': (['x', 'y'], albedo.values),
+                                        'grain_size': (['x', 'y'], grain.values),
+                                        'density': (['x', 'y'], density.values),
+                                        'algae': (['x', 'y'], algae.values),
+                                        'Icemask': (['x', 'y'], imagePast.Icemask),
+                                        'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                                        'FinalMask': (['x', 'y'], combinedMask),
+                                        proj_info.attrs['grid_mapping_name']: proj_info,
+                                        'longitude': (['x', 'y'], imagePast.longitude),
+                                        'latitude': (['x', 'y'], imagePast.latitude)
+                                    }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
 
-            else: # if snicar retrieval toggled off
+            else: # if disort retrieval toggled off
 
                 # extract the past and future albedo and classified layers.
                 albPast = imagePast.albedo.values
@@ -527,41 +523,42 @@ def imageinterpolator(years, months, tile, proj_info):
                         newImage = newImage.filled(np.nan)
                         newImage = abs(newImage)
 
-                        if counter ==0: # for albedo layer, ensure values in range
-                            newImage[newImage <= 0] = 0.00001 # ensure no interpolated values can be <= 0 
-                            newImage[newImage >= 1] = 0.99999 # ensure no inteprolated values can be >=1
+                        if counter ==0: # for albedo layer, ensure values within range
+                            newImage[newImage <= 0] = 0.00001
+                            newImage[newImage >= 1] = 0.99999
                         
                         newImagexr = xr.DataArray(newImage)
-                        newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+f'interpolated_{filenames[counter]}.nc'))
+                        newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+'interpolated_{}.nc').format(filenames[counter]))
                         newImagexr = None
                         counter +=1
 
 
-                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc')) as albedo:
-                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc')) as surfClass:
+                albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
+                surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
+
+                # collate data into xarray dataset and copy metadata from PAST
+                newXR = xr.Dataset({
+                    'classified': (['x', 'y'], surfclass.values),
+                    'albedo': (['x', 'y'], albedo.values),
+                    'Icemask': (['x', 'y'], imagePast.Icemask),
+                    'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                    'FinalMask': (['x', 'y'], combinedMask),
+                    proj_info.attrs['grid_mapping_name']: proj_info,
+                    'longitude': (['x', 'y'], imagePast.longitude),
+                    'latitude': (['x', 'y'], imagePast.latitude)
+                }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
 
-                        # collate data into xarray dataset and copy metadata from PAST
-                        newXR = xr.Dataset({
-                            'classified': (['x', 'y'], surfclass.values),
-                            'albedo': (['x', 'y'], albedo.values),
-                            'Icemask': (['x', 'y'], imagePast.Icemask),
-                            'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                            'FinalMask': (['x', 'y'], combinedMask),
-                            proj_info.attrs['grid_mapping_name']: proj_info,
-                            'longitude': (['x', 'y'], imagePast.longitude),
-                            'latitude': (['x', 'y'], imagePast.latitude)
-                        }, coords = {'x': imagePast.x, 'y': imagePast.y})
-
+                albedo = None
+                surfClass = None
 
                 files = glob.glob(str(os.environ['PROCESS_DIR'] + 'interpolated_' + '*.nc'))
                 for f in files:
                     os.remove(f)
 
             # save synthetic image in same format in sub directory as original "good" images
-            newXR.to_netcdf(str(os.environ["PROCESS_DIR"] + "/outputs/" + tile + "/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString)), mode='w')            
+            newXR.to_netcdf(str(os.environ["PROCESS_DIR"] + "/outputs/" + tile + "/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString)), mode='w')
             print("Interpolated dataset saved locally")
-            
             newXR = None
 
     return
@@ -578,9 +575,9 @@ def create_outData(tile,year,month,savepath):
 
     # if toggled, downsample the outData to the required resolution
     if config.get('options','downsample_outdata')=='True':
-        outDataRes = config.get('options','outData_resolution')
+        outDataRes = int(config.get('options','outData_resolution'))
         file_list = file_list[0:len(file_list):outDataRes]
-    
+
     # GRAB DATES FROM FILE STRINGS
     for i in file_list:
         dateList.append(i.split(str(tile+'_'))[1].split('_Class')[0])
@@ -599,14 +596,14 @@ def create_outData(tile,year,month,savepath):
     return dateList
 
 
-def createSummaryData(tile,year,month, savepath, dateList):
+def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False):
 
     outPath = savepath
 
     ds = xr.open_dataset(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
     
     # DEFINE SIZE OF OUT ARRAYS
-    if config.get('options','retrieve_snicar_params')=='True':
+    if config.get('options','retrieve_disort_params')=='True':
         out = np.zeros(shape=(10,len(ds.date)))
         outClass = np.zeros(shape=(11,len(ds.date),7))
 
@@ -616,7 +613,7 @@ def createSummaryData(tile,year,month, savepath, dateList):
 
 
     # START SUMMARIZING DATA AND APPENDING RESULTS TO OUT ARRAYS 
-    if config.get('options','retrieve_snicar_params')=='True': 
+    if config.get('options','retrieve_disort_params')=='True': 
         
         for i in range(len(ds.date)):
 
@@ -630,8 +627,6 @@ def createSummaryData(tile,year,month, savepath, dateList):
             out[5,i] = ds.density.sel(date=date_i).std().values # std density
             out[6,i] = ds.algae.sel(date=date_i).mean().values # mean algae
             out[7,i] = ds.algae.sel(date=date_i).std().values # mean algae
-            out[8,i] = ds.dust.sel(date=date_i).mean().values #mean dust
-            out[9,i] = ds.dust.sel(date=date_i).std().values #std dust
             
             # outputs by class
             for j in range(7):
@@ -645,16 +640,13 @@ def createSummaryData(tile,year,month, savepath, dateList):
                 outClass[6,i,j] = np.std(ds.density.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of density in each class
                 outClass[7,i,j] = np.mean(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of algae in each class
                 outClass[8,i,j] = np.std(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of algae in each class
-                outClass[9,i,j] = np.mean(ds.dust.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of dust in each class
-                outClass[10,i,j] = np.std(ds.dust.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of dust in each class
         
-        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae','meanDust','STDDust'],'date':dateList})
-        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD','GrainMean','GrainSTD','DensityMean','DensitySTD','AlgaeMean','AlgaeSTD','DustMean','DustSTD'], 'date':dateList,\
+        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae'],'date':dateList})
+        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD','GrainMean','GrainSTD','DensityMean','DensitySTD','AlgaeMean','AlgaeSTD'], 'date':dateList,\
             'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
 
         outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
         outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
-
 
     else:
         
@@ -662,8 +654,8 @@ def createSummaryData(tile,year,month, savepath, dateList):
             
             date_i = dateList[i]
             # scalar outputs
-            out[0,i] = ds.albedo.sel(date=date_i).mean().values  # mean albedo across whole tile
-            out[1,i] = ds.albedo.sel(date=date_i).std().values # std albedo across whole tile
+            out[0,i] = ds.albedo.sel(date=date_i).mean(skipna=True).values  # mean albedo across whole tile
+            out[1,i] = ds.albedo.sel(date=date_i).std(skipna = True).values # std albedo across whole tile
 
             # outputs by class
             for j in range(7):
@@ -686,7 +678,7 @@ def createSummaryData(tile,year,month, savepath, dateList):
 
         for file in file_list:
             os.remove(file)
-            
+
 
     if config.get('options','upload_to_blob')=='True':
 
@@ -703,19 +695,20 @@ def createSummaryData(tile,year,month, savepath, dateList):
 def cloud_interpolator(dataset):
     
     """
+    
     In this cloud interpolator, the missing values are simply filled with the median value for that layer
 
     """
 
-    # define list of layers depending upon whether snicar
-    if config.get('options','retrieve_snicar_params')=='True':
+    # define list of layers depending upon whether disort
+    if config.get('options','retrieve_disort_params')=='True':
 
-        layers = [dataset.classified, dataset.albedo, dataset.grain_size, dataset.density, dataset.dust, dataset.algae]
+        layers = [dataset.classified, dataset.albedo, dataset.grain_size, dataset.density, dataset.algae]
     
     else:
     
         layers = [dataset.classified, dataset.albedo]
-        
+    
     # define mask
     mask = dataset.FinalMask
 
@@ -741,12 +734,8 @@ def cloud_interpolator(dataset):
         elif i == 3:
             dataset.density.values = layer
             layer = None
-
-        elif i == 4:
-            dataset.dust.values = layer
-            layer = None
         
-        elif i == 5:
+        elif i == 4:
             dataset.algae.values = layer
             layer = None
 

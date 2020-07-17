@@ -949,6 +949,39 @@ def model_fits(var,degree, start, stop):
 
     return coeffs, results, linresults
 
+def compare_vars_between_classes(DZ_Class):
+
+    fig, (ax1,ax2,ax3) = plt.subplots(nrows=3,ncols=1, figsize=(20,10))
+
+    ax1.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.AlgaeMeanHA, color='g', label='HA', marker = 'x')
+    ax1.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.AlgaeMeanLA, color='r', label='LA', marker = 'x')
+    ax1.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.AlgaeMeanCI, color='b', label='CI', marker = 'x')
+    ax1.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.AlgaeMeanCC, color='k', label='CC', marker = 'x')
+    ax1.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.AlgaeMeanWAT, color='grey', label = 'WAT',marker = 'x')
+    ax1.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.AlgaeMeanSN, color='y', label='SN',marker = 'x')
+    ax1.set_ylabel('Algae ppb')
+    ax1.set_xticks([])
+    
+    ax2.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.GrainMeanHA, color='g', label='HA', marker = 'x')
+    ax2.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.GrainMeanLA, color='r', label='LA', marker = 'x')
+    ax2.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.GrainMeanCI, color='b', label='CI', marker = 'x')
+    ax2.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.GrainMeanCC, color='k', label='CC', marker = 'x')
+    ax2.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.GrainMeanWAT, color='grey', label='WAT', marker = 'x')
+    ax2.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.GrainMeanSN, color='y', label='SN', marker = 'x')
+    ax2.set_ylabel('Grian size (microns)')
+    ax2.set_xticks([])
+
+    ax3.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.DensityMeanHA, color='g', label='HA', marker = 'x')
+    ax3.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.DensityMeanLA, color='r', label='LA', marker = 'x')
+    ax3.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.DensityMeanCI, color='b', label='CI', marker = 'x')
+    ax3.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.DensityMeanCC, color='k', label='CC', marker = 'x')
+    ax3.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.DensityMeanWAT, color='grey', label='WAT', marker = 'x')
+    ax3.scatter(np.arange(0,len(DZ_Class),1), DZ_Class.DensityMeanSN, color='y', label='SN', marker = 'x')
+    ax3.set_ylabel('Density (kg m-3)')
+    ax1.legend(loc='upper right')
+
+    return
+
 
 # Function Calls
 
@@ -964,4 +997,5 @@ DZ, DZ_Class, wea, web, wec, wet, weu, wev = import_csvs(filepath,True,True)
 # Latitudinal_trends(wea,web,wec,wev,weu,wet, savepath,\
 # anova_assumptions = True, KW_test = True)
 # plot_coverage(DZ, DZ_Class,savepath)
+compare_vars_between_classes(DZ_Class)
 

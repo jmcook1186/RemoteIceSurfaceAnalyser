@@ -24,19 +24,84 @@ import json
 import configparser
 import datetime as dt
 import calendar
-
 from sentinelsat import SentinelAPI
-
 import sentinel2_tools
 import sentinel2_azure
+from collections import OrderedDict
+import pytz
+import datetime
+from pysolar import *
+import pandas as pd
+
+
+def download_L1C(api, L1Cpath, tile, dates, cloudcoverthreshold):
+    """
+    This function uses the sentinelsat API to download L1C products for tiles defined by "tile" in the date range
+    specified by "dates". Prints number of files and their names to console.
+    :param L1Cpath:
+    :param tile:
+    :param dates:
+    :return: L1Cfiles
+    """
+
+    # define keyword arguments
+    query_kwargs = {
+            'platformname': 'Sentinel-2',
+            'producttype': 'S2MSI1C',
+            'date': dates,
+            'cloudcoverpercentage': (0, cloudcoverthreshold)}
+
+    products = OrderedDict()
+
+    # loop through tiles and list all files in date range
+
+    kw = query_kwargs.copy()
+    kw['tileid'] = tile  # products after 2017-03-31
+    pp = api.query(**kw)
+    products.update(pp)
+
+    # keep metadata in pandas dataframe
+    out = api.to_dataframe(products)
+
+    return out
+
+
+def add_coszen(path):
+
+    df = pd.read_csv(path)
+
+    sol_elev = []
+    sol_zen = []
+    sol_zen_rad=[]
+    coszen = []
+
+    for date in df.endposition:
+        date = str(date+'+0000')
+        dt = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S.%f%z')
+        sol_elev.append(get_altitude(67.04, -49.49, dt))
+
+    
+    for i in np.arange(0,len(sol_elev),1):
+        zenith = 90-sol_elev[i]
+        zenith_rad = zenith * np.pi/180
+        cos_zenith = np.cos(zenith_rad)
+        
+        sol_zen.append(zenith)
+        sol_zen_rad.append(zenith_rad)
+        coszen.append(cos_zenith)
+
+    df['sol_elev'] = sol_elev
+    df['sol_zen'] = sol_zen
+    df['sol_zen_rad'] = sol_zen_rad
+    df['coszen'] = coszen
+
+    df.to_csv(path)
+
+    return
 
 # Get project configuration
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
-
-tiles = json.loads(config.get('options','tiles'))
-years = json.loads(config.get('options','years'))
-months = json.loads(config.get('options','months'))
 
 
 # Open API to Azure blob store
@@ -49,10 +114,13 @@ azure = sentinel2_azure.AzureAccess(azure_cred.get('account','user'),
 # Open API to Copernicus SciHub
 cscihub_cred = configparser.ConfigParser()
 cscihub_cred.read_file(open(os.environ['CSCIHUB_SECRET']))
-chub_api = SentinelAPI(cscihub_cred.get('account','user'), 
-        cscihub_cred.get('account','password'),
-        'https://scihub.copernicus.eu/apihub')
+chub_api = SentinelAPI(cscihub_cred.get('account','user'), cscihub_cred.get('account','password'),'https://scihub.copernicus.eu/apihub')
 
+
+metadata = []
+tiles = json.loads(config.get('options','tiles'))
+years = json.loads(config.get('options','years'))
+months = json.loads(config.get('options','months'))
 
 # Iterate through tiles
 for tile in tiles:
@@ -71,20 +139,13 @@ for tile in tiles:
 
             # set path to save downloads
             L1Cpath = os.environ['PROCESS_DIR']
-
+            
             print('\n TILE %s, %s-%s' %(tile, year, month))
 
-            L1Cfiles = sentinel2_tools.download_L1C(chub_api, L1Cpath, tile, dates, 
-                config.get('thresholds','cloudCoverThresh'))
-            sentinel2_tools.process_L1C_to_L2A(L1Cpath, L1Cfiles, 
-                config.get('options','resolution'), unzip_files=True)
-            sentinel2_tools.remove_L1C(L1Cpath)
-            upload_status = azure.send_to_blob(tile, L1Cpath, check_blobs=True)
-            sentinel2_tools.remove_L2A(L1Cpath, upload_status)
+            out = download_L1C(chub_api, L1Cpath, tile, dates, config.get('thresholds','cloudCoverThresh'))
+            
+            savepath = '/home/joe/Desktop/BISC_metadata/{}_{}_{}.csv'.format(tile,year,month)
+            out.to_csv(savepath)
 
-            # Should not catch all exceptions like this as this hides any genuine errors. Instead catch 
-            # specific errors only - not yet sure what these would be.
-            #except: 
-            #    print("\n No images found for this tile on the specified dates")
-
-print('X'.center(80,'X'), ' FINISHED ALL TILES '.center(80,'X'),'\n','X'.center(80,'X'))
+    # run function to add solar zenith info to metadata csv
+    #add_coszen(savepath)
