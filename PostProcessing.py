@@ -33,8 +33,8 @@ def process_from_nc(savepath, OutDataPath, ClassDataPath, byClass=False):
             DF = file.to_dataframe(name='DF')
 
             # create empty dataframe and numpy array ready to receive output data
-            OutDF = pd.DataFrame(columns=['Date','STDAlbedo','STDAlgae','STDDensity','STDDust',\
-            'STDGrain','meanAlbedo','meanAlgae','meanDensity','meanDust','meanGrain'])
+            OutDF = pd.DataFrame(columns=['Date','STDAlbedo','STDAlgae','STDDensity',\
+            'STDGrain','meanAlbedo','meanAlgae','meanDensity','meanGrain'])
             
             OutArray = np.zeros(shape=(len(DF.index.levels[1]),len(DF.index.levels[0])))
             dateList=[]
@@ -225,8 +225,8 @@ def combine_darkzone():
     weuDF = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/22weu.csv')
     wevDF = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/22wev.csv')
 
-    meanDF = pd.DataFrame(columns=['Date','STDAlbedo','STDAlgae','STDDust','STDGrain',\
-        'meanAlbedo','meanAlgae','meanDensity','meanDust','meanGrain'])
+    meanDF = pd.DataFrame(columns=['Date','STDAlbedo','STDAlgae','STDGrain',\
+        'meanAlbedo','meanAlgae','meanDensity','meanGrain'])
 
     meanDF['Date'] = pd.to_datetime(weaDF['Date'].astype(str), format='%Y/%m/%d')
     meanDF['DOY'] = meanDF['Date'].dt.dayofyear
@@ -241,9 +241,6 @@ def combine_darkzone():
     meanDF['STDDensity'] = np.mean([weaDF['STDDensity'],webDF['STDDensity'],wecDF['STDDensity'],\
         wetDF['STDDensity'],wevDF['STDDensity']],axis=0)
 
-    meanDF['STDDust'] = np.mean([weaDF['STDDust'],webDF['STDDust'],wecDF['STDDust'],\
-        wetDF['STDDust'],wevDF['STDDust']],axis=0)
-
     meanDF['STDGrain'] = np.mean([weaDF['STDGrain'],webDF['STDGrain'],wecDF['STDGrain'],\
         wetDF['STDGrain'],wevDF['STDGrain']],axis=0)
 
@@ -255,9 +252,6 @@ def combine_darkzone():
 
     meanDF['meanDensity'] = np.mean([weaDF['meanDensity'],webDF['meanDensity'],wecDF['meanDensity'],\
         wetDF['meanDensity'],wevDF['meanDensity']],axis=0)
-
-    meanDF['meanDust'] = np.mean([weaDF['meanDust'],webDF['meanDust'],wecDF['meanDust'],\
-        wetDF['meanDust'],wevDF['meanDust']],axis=0)
 
     meanDF['meanGrain'] = np.mean([weaDF['meanGrain'],webDF['meanGrain'],wecDF['meanGrain'],\
         wetDF['meanGrain'],wevDF['meanGrain']],axis=0)

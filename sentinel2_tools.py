@@ -604,8 +604,8 @@ def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False
     
     # DEFINE SIZE OF OUT ARRAYS
     if config.get('options','retrieve_disort_params')=='True':
-        out = np.zeros(shape=(10,len(ds.date)))
-        outClass = np.zeros(shape=(11,len(ds.date),7))
+        out = np.zeros(shape=(8,len(ds.date)))
+        outClass = np.zeros(shape=(9,len(ds.date),7))
 
     else:
         out = np.zeros(shape=(2,len(ds.date)))
@@ -661,8 +661,8 @@ def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False
             for j in range(7):
 
                 outClass[0,i,j] = len(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # count instances of each class
-                outClass[1,i,j] = np.mean(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
-                outClass[2,i,j] = np.std(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
+                outClass[1,i,j] = np.mean(ds.albedo.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
+                outClass[2,i,j] = np.std(ds.albedo.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
 
         outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STD Albedo'],'date':dateList})
         outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD'], 'date':dateList,

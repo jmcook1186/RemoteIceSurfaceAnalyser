@@ -54,16 +54,26 @@ class SurfaceClassifier:
         
         # Open link to each image
         store = []
+
         for band in self.s2_bands_use:
+    
             fn = glob.glob('%s*%s_%sm.jp2' %(img_path,band,resolution))
-            
+
             if len(fn) > 1:
-                raise ValueError
+
+                raise ValueError("Multiple bands named {} in blob container. One expected.".format(fn))
+
             else:
-                fn = fn[0]
+                try:
+
+                    fn = fn[0]
+
+                except: 
+                    raise IndexError("At least one band missing from S2 blob container")   
             
             da_band = xr.open_rasterio(fn, chunks={self.NAME_x: 2000, self.NAME_y: 2000})
             crs = da_band.attrs['crs']
+            
             # Apply scaling factor
             da_band = da_band / self.l2a_scaling_factor
             da_band[self.NAME_bands] = band
