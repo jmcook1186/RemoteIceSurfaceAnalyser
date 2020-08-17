@@ -10,7 +10,7 @@ The South Western Greenland Ice Sheet Dark Zone is contained within the followin
 
 ### Hardware
 
-The computational requirements of this script vary depending upon which functions are toggled on/off. We have been tried to keep as much of the processing out of memory as possible, only loading arrays when unavoidable. We have also made extensive use of Dask for distributing the work over the available processing cores, so significant acceleration will be experienced when this software is run of machines with more available cores. We have been using a Microsoft Azure Linux Data Science Machine with 72 processing cores (ID = Fs72). The cost for this virtual machine is ~£3/hour. Once the main processing had been achieved we continued to use an Azure VM for the data analysis but since we had less need for large multi-core processing we resized to a 16 core E16s which cost ~90p/hour. Maintaining a smaller VM rather than doing the data analysis locally was preferred because of much easier and faster access to the large amount of output data (2.4 TB) stored remotely in Azure storage blobs. By far the most time consuming step in the pipeline is the uploading of output data to blob storage, the slowest part of the actual processing pipeline is the radiative transfer model inversion.
+The computational requirements of this script vary depending upon which functions are toggled on/off. We have been tried to keep as much of the processing out of memory as possible, only loading arrays when unavoidable. We have also made extensive use of Dask for distributing the work over the available processing cores, so significant acceleration will be experienced when this software is run of machines with more available cores. We have been using a Microsoft Azure Linux Data Science Machine with 72 processing cores (ID = Fs72). The cost for this virtual machine is ~£3/hour. On the Fs72 VM it takes just over 21 hours to process 1 year's worth of imagery (6 tiles, JJA, all processing options toggled ON, including uploading results to blob storage). Once the main processing had been achieved we continued to use an Azure VM for the data analysis but since we had less need for large multi-core processing we resized to a 16 core E16s which cost ~90p/hour. Maintaining a smaller VM rather than doing the data analysis locally was preferred because of much easier and faster access to the large amount of output data (2.4 TB) stored remotely in Azure storage blobs. By far the most time consuming step in the pipeline is the uploading of output data to blob storage, the slowest part of the actual processing pipeline is the radiative transfer model inversion.
 
 ### Environment
 
@@ -72,7 +72,7 @@ Options:
 6) icemask: this is the file name for the ice mask to use
 7) resolution: the desired resolution of the sentinel 2 imagery
 8) savefigs: now redundant option to toggle figure saving on/off
-9) retrieve_snicar_params: toggle to control whether the RTM inversion function is run. If true, grain size, density, algal concentration, dust concentration are included in the output data, if not they are absent.
+9) retrieve_disort_params: toggle to control whether the RTM inversion function is run. If true, grain size, density, algal concentration, dust concentration are included in the output data, if not they are absent.
 10) interpolate_cloud: toggle to control whether pixels obscured by cloud are interpolated over to give continuous data across the icy part of the image
 11) interpolate_missing_tiles: toggle to control whether missing dates are infilled by linear interpolation between "good" dates
 12) calculate_melt: toggle to control whether melt rates are calculated pixelwise across the image area. This is off by default because although the eb modelling works, elevation and meterological input valus are currently held constant, which is of limited value.
@@ -182,11 +182,20 @@ The classifier assigns one of 6 surface type labels to each pixel. This is achie
 
 Surface albedo is calculated using Liang et al's (2000) narrowband to broadband conversion which was originally formulated for LANDSAT but validated for Sentinel-2 by Naegeli et al. (2017).
 
-### Snicar retrievals
+### RTM retrievals
 
-There is an option in the template file to retrieve ice surface parameters using an inverted radiative transfer model (BioSNICAR_GO from Cook et al. 2020: https://doi.org/10.5194/tc-14-309-2020). If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of 2400 BioSNICAR_GO-generated spectra. The snicar parameters (grain size, density, dust concentration, algae concentration) used to generate the closest-matching spectra (measured as absolute error) are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. 
+There is an option in the template file to retrieve ice surface parameters using an inverted radiative transfer model (BioDISORT which uses a Python interface modelled after BioSNICAR_GO from Cook et al. 2020: https://doi.org/10.5194/tc-14-309-2020) to run the radiatve transfer model DISORT. If this is set to "True" then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of 2244 BioDISORT-generated spectra. There are multiple LUTs generated using different solar zenith angles. The appropriate LUT is selected by comparison to the solar zenith angle at the time of aquisition for the S2 image calculated from the site coordinates, date and time from the image metadata. The DISORT parameters (grain size, density, algae concentration) used to generate the closest-matching spectra (measured as absolute error) are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. Dust is not quantified because a) previous research indicates that it is insignificant as a driver of surface albedo, b) initial tests indicated that dust was taking effectively random values rather than being a significant controlling variable for the spectral albedo.
 
 Note that despite the LUT approach, the RTM inversion is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in about 7 minutes per tile. Increasing the size of the LUT increases the computation time. Currently the LUT comprises 2400 individual simulated spectra, produced by running snicar with all possible combinations of 6 grain sizes, 5 densities, 8 dust concentrations and 10 algal concentrations. 
+
+### 2DBA Band ratio index and prediction
+
+If the DISORT inversion is toggled ON, the 2DBA band ratio index and prediction is calculated by default. The 2DBA index was proposed by Wang et al (2018) for biomass quantification. It is the ratio between reflectance in Sentinel 2 bands 5 / band 4. The ratio for each pixel is saved as the 2DBA index (the layer name in the output dataset is "Index2DBA"). Wang et al. also proposed an exponential equation for converting index value into biomass concentration in cells/mL:
+
+cells/mL = 10^-35 * 2DBAIndex exp^(87.015*2DBAIndex)
+
+This is applied piwelwise and the predicted biomass concentration in cells/mL according to the Wang et al. (2018) method is saved as a separate layer in the output dataset, named "predict2DBA". This enables direct comparison between the biomass quantification estimated using the band ratio technique and the biomass quantification estimated using the inverse RTM.
+
 
 ### Missing pixel interpolation
 
@@ -198,7 +207,7 @@ There is an option to toggle interpolation on/off. If interpolation is toggled o
 
 ### Energy Balance Modelling
 
-TOGGLED OFF BY DEFAULT - limited usefulness with elevation and meteorological inputs held constant across entire tile. However, this is an obvious development opportunity for future versions - the relevant met data are provided in this repository.
+TOGGLED OFF BY DEFAULT - limited usefulness with elevation and meteorological inputs held constant across entire tile. However, this is an obvious development opportunity for future versions - potentially relevant met data from the PROMICE network are provided in this repository.
 
 There is an option to toggle energy balance modelling on/off. If this is toggled on, the albedo calculated using the Liang et al. (2000) formula is used as an input to drive a Python implementation of the Brock and Arnold (2000) point-surface energy balance model. By default, all available processing cores are used to distribute this task using the multiprocessing package. Currently, the other meteorological variabes are hard-coded constants - an obvious to-do is to make these variables that are grabbed from a LUT for the specific day/tile being processed. This is more computatonally expensive than the classification and albedo computations but cheaper than the snicar parameter retrievals. It is feasible to run the processing pipeline with energy-balance toggled on locally on a well spec'd laptop in about 100 minutes per tile. For large runs it is recommended to use an HPC resource to accelerate this function (takes about 9 mins on 72 core VM), especially if both the energy balance and snicar param retrievals are toggled on (in which case ~70 mins per tile). The outputs from this function are melt rate in mm w.e./day. The total melt over the tile is also returned.
 
@@ -206,30 +215,36 @@ There is an option to toggle energy balance modelling on/off. If this is toggled
 # Outputs
 
 ### Maps
+
 A specific tile on a specific date has associated with it several variables of interest, including albedo, surface class, grain size, ice density, dust concentration, algae concentration. Each of these variables is mapped over a 5490 x 5490 pixel grid, as per the original Sentinel-2 image. Each of these variables is therefore stored as a 5490 x 5490 array of values. These are stored in an xarray dataset with common cartographic and georeferencing attributes, dimensions and coordinates but unique values. For ach individual tile. the values on each date are collated into a single large NetCDF file. These files are large - a single month for a single tile occupies ~ 30GB of memory - one summer's data for a single tile occupies ~90GB.
 
 From April 2020, these data are optionally downsampled. By default this is to 3-day temporal resolution, but this can be changed easily in the template file. This was deemed to be an acceptable trade-off between memory requirements and resolution. Five tiles can be analysed over 5 years of the Sentinel-2 record in 750GB of storage space using the 3-day resolution, whereas 1-day resolution data occupied 2.3 TB.
 
 ### Summary Data
-Because of the large size of the maps described above, summary datasets are also saved as NetCDFs. These include descriptive metrics for each tile on each date, including the mean, standard deviationand frequency for each variable. These are small files that only contain these summary metrics, not the original dataset.
+
+Because of the large size of the maps described above, summary datasets are also saved as NetCDFs. These include descriptive metrics for each tile on each date, including the mean, standard deviationand frequency for each variable. These are small files that only contain these summary metrics, not the original dataset. These summary data include the mean and standard deviation of each metric across each tile, but excluding pixels that the classifier identified as SN, WAT or CC (i.e. limited to areas of bare ice that are not melt ponds or cryoconite-covered).
 
 Note that these data are opened using xarray's open_dataarray() function, not open_dataset().
 
 ### Metadata
-There is a range of metadata output by the scripts, including text files detailing the model configuration, lists of tile/date that were analysed, those that were rejected by image quality control, and those generated by the interpolation function. These help to record the precise conditons under which the script was run.
+
+There is a range of metadata output by the scripts, including text files detailing the model configuration, lists of tile/date that were analysed, those that were rejected by image quality control, and those generated by the interpolation function. These help to record the precise conditons under which the script was run. There is also a separate .csv file containing the downloaded Sentinel-2 metadata for each file, plus additional columns for calculated solar zenith angle.
 
 ## Output Data Post-processing
+
 The script post-processing.py is available for wrangling the summary data. The main program saves two netCDF files to the Azure storage container for each tile/year. The first is simple summary statistics including the mean and standard deviation of the albedo, grain size, algal concentration, ice density, dust concentration and the retrieval date. The second contains the same metrics but divided by the surface class as predicted by the random forest classifier (ie mean albedo for HA, standard deviation of algal concentration for LA etc. etc.)
 The post-processing script concatenates all of this data into a convenient .csv file that can be easily interrogated using Pandas or exported to a spreadsheet program. These are automatically saved to /BigIceSurfClassifier/BISC_OUT/PROCESSED/.
 
 ## Plotting
-Plotting is TBC- the full datasets for each variable for each tile and DOY occupy 2.4TB on disk, so some decisions must be made about what specifically to extract and plot. Aim to be completed by 01/07/20.
+
+Plotting scripts are still to be finalised as the relevant plots are still being adjusted - the full datasets for each variable for each tile and DOY occupy 2.4TB on disk, so some decisions must be made about what specifically to extract and plot. Aim to be completed by 01/09/20.
 
 ## Troubleshooting
 
 Here are some of the possible exceptions, errors and gotchas that could be encountered when running this code, and their solutions.
 
 ### Azure and SentinelHub
+
 The user must have their own Azure account with blob storage access. The scripts here manage the creation of storage blobs and i/o to and from them, but this relies upon the user having a valid account name and access key saved in an external file ".azure_secret" in the process directory. The same is true of the copernicus science hub - the user must have a valid username and password stored in an external file ".cscihub_secret" saved in the process directory to enable batch downloads of Sentinel-2 images that are not already saved in blob storage.
 
 BEWARE since August 2019 Copernicus moved all products older than 18 months to a Long Term Archive (LTA). These products are not available for immediate download, meaning the download_process_s2.py script will fail initially. However, the request made by the script will trigger the product to be retrieved from the archive and made available some time "from minutes to hours" after the request is made. This means the script has to be re-run, likely multiple times, to get the product after it has been made available.
@@ -244,6 +259,7 @@ This code probably shouldn't be run in an interactive (e.g. ipython/jupyter) env
 This likely results from a path error, check that the folder structure on the machine running the code is consistent with that in this README.
 
 ### ... config.read_file(open(sys.argv[1])) IndexError: list index out of range
+
 This error most likely indicates that run_classifier.py is being run from the terminal wihout specifying the .template file or that there is a problem with the .template file. Perhaps the template file name has been typed incorrectly.
 
 ## Tests

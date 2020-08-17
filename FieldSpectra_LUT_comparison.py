@@ -246,37 +246,14 @@ def combined_figure(savepath):
 
     return
 
-savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Figures_and_Tables/'
-compare_predicted_and_measured(savepath)
-compare_measured_concn_to_predicted(savepath)
-combined_figure(savepath) 
 
-# this function just takes elements from the other two functions
-# to create a 3 panel figure with 1 plot from func 1 and 2 plots from func 2.
-
-
-
-
-def clean_ice_field_vs_DISORT():
+def clean_ice_field_vs_DISORT_NIR():
     
     """
     This function takes all clean ice field spectra and compares them to the DISORT
-    simulated spectra. 
+    simulated spectra in the NIR wavelengths (0.9 - 1.1 um)
 
-    Results available in: /home/joe/Code/BigIceSurfClassifier/Spectra_Metadata.csv
-
-    NB to obtain LUT param predictions for specific field spectra:
-
-    spectra.columns.get_loc('21_7_SB3')
-    
-    >> 46
-
-    params[46]
-
-    >>
-    ([700, 700, 700, 700, 700],
-    [8000, 8000, 8000, 8000, 8000],
-    [20000, 0, 0, 0, 0])
+    The out data is stored as a pandas dataframe and saved to csv as 'field_disort_NIR_comparison.csv'
 
     """
 
@@ -302,6 +279,7 @@ def clean_ice_field_vs_DISORT():
 
     spectra = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv')
     LUT = np.load('/home/joe/Code/BigIceSurfClassifier/Process_Dir/LUT_clean.npy')
+    
     params = []
     # reformat LUT: flatten LUT from 3D to 2D array with one column per combination
     # of RT params, one row per wavelength
@@ -343,4 +321,15 @@ def clean_ice_field_vs_DISORT():
     OutDF['grainsize'] = grainlist
     OutDF['min_error'] = errorlist
 
+    OutData.to_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/field_disort_NIR_comparison.csv')
+    
+    
     return
+
+
+# savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Figures_and_Tables/'
+# compare_predicted_and_measured(savepath)
+# compare_measured_concn_to_predicted(savepath)
+# combined_figure(savepath) 
+
+clean_ice_field_vs_DISORT_NIR()

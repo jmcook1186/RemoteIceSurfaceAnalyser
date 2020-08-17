@@ -3,11 +3,11 @@
 vm=True
 ; Tiles to process.
 ; Each tile must be in DOUBLE quotation marks; separate entries by commas
-tiles=["22WEV"]
+tiles=["22WEA","22WEB","22WEC","22WET","22WEU","22WEV"]
 ; Years to process.
-years=[2018]
+years=[2016]
 ; Months to process.
-months=[6]
+months=[6,7,8]
 ; Name of pkl file (place the file in PROCESS_DIR).
 classifier=Sentinel2_classifier.pkl
 ; Name of icemask file (place in PROCESS_DIR).
@@ -31,7 +31,7 @@ outData_resolution=3
 ; delete individual files after collated multi-date file created?
 remove_individual_files=True
 ; upload outData to blob storage and delete local copy?
-upload_to_blob=True
+upload_to_blob=False
 
 [thresholds]
 ; Minimum area required to be ice-covered, 0-100 (%).

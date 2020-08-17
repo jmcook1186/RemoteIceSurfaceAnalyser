@@ -142,8 +142,7 @@ for tile in tiles:
         print("\n DOWNLOADING FILES: {} {}\n".format(tile,date))
 
         #query blob for files in tile and date range
-        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
-                                                                      date, os.environ['PROCESS_DIR'])
+        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,date, os.environ['PROCESS_DIR'])
 
         # check download and only proceed if correct no. of files and cloud layer present
 
@@ -186,15 +185,16 @@ for tile in tiles:
                 # apply classifier and calculate albedo
                 predicted = bsc.classify_image(s2xr, savepath, tile, date, savefigs=True)
                 albedo = bsc.calculate_albedo(s2xr)
+                Index2DBA, predict2DBA = bsc.calculate_2DBA(s2xr)
                 mask2 = bsc.combine_masks(s2xr)
-
+                
                 # 1) Retrieve projection info from S2 datafile and add to netcdf
                 proj_info = xr_cf_conventions.create_grid_mapping(s2xr.Data.attrs['crs'])
 
                 # 2) Create associated lat/lon coordinates DataArrays using georaster (imports geo metadata without loading img)
                 # see georaster docs at https:/media.readthedocs.org/pdf/georaster/latest/georaster.pdf
                 # find B02 jp2 file
-                fileB2 = glob.glob(str(os.environ['PROCESS_DIR'] + '*B02_20m.jp2'))
+                fileB2 = glob.glob(str(os.environ['PROCESS_DIR'] + '*{}*B02_20m.jp2').format(tile.upper()))
                 fileB2 = fileB2[0]
 
                 lon, lat = xr_cf_conventions.create_latlon_da(fileB2, 'x', 'y',
@@ -219,6 +219,25 @@ for tile in tiles:
                 albedo.name = 'Surface albedo computed after Knap et al. (1999) narrowband-to-broadband conversion'
                 albedo.attrs['units'] = 'dimensionless'
                 albedo.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+
+
+                # add 2DBA map array and add metadata
+
+                Index2DBA = Index2DBA.fillna(0)
+                Index2DBA = Index2DBA.where(mask2 > 0)
+                Index2DBA.encoding = {'dtype': 'int16', 'scale_factor': 0, 'zlib': True, '_FillValue': -9999}
+                Index2DBA.name = '2DBA band ratio index value (Wang et al. 2018)'
+                Index2DBA.attrs['units'] = 'dimensionless'
+                Index2DBA.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+
+                # add 2DBA map array and add metadata
+
+                predict2DBA = predict2DBA.fillna(0)
+                predict2DBA = predict2DBA.where(mask2 > 0)
+                predict2DBA.encoding = {'dtype': 'int16', 'scale_factor': 0, 'zlib': True, '_FillValue': -9999}
+                predict2DBA.name = '2DBA band ratio index value (Wang et al. 2018)'
+                predict2DBA.attrs['units'] = 'dimensionless'
+                predict2DBA.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                 ## RUN DISORT INVERSION
                 #######################
@@ -266,7 +285,6 @@ for tile in tiles:
                         density.attrs['units'] = 'Kg m-3'
                         density.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
-
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
 
                         algae.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
@@ -279,6 +297,8 @@ for tile in tiles:
                     dataset = xr.Dataset({
                         'classified': (['x', 'y'], predicted),
                         'albedo': (['x', 'y'], albedo),
+                        'Index2DBA':(['x','y'],Index2DBA),
+                        'predict2DBA': (['x','y'],predict2DBA),
                         'grain_size': (['x','y'],side_length),
                         'density':(['x','y'],density),
                         'algae':(['x','y'],algae),
@@ -299,6 +319,8 @@ for tile in tiles:
                     dataset = xr.Dataset({
                         'classified': (['x', 'y'], predicted),
                         'albedo': (['x', 'y'], albedo),
+                        'Index2DBA':(['x','y'],Index2DBA),
+                        'predict2DBA': (['x','y'],predict2DBA),
                         'Icemask': (['x', 'y'], s2xr.Icemask),
                         'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
                         'FinalMask': (['x', 'y'], mask2),

@@ -56,24 +56,21 @@ class SurfaceClassifier:
         store = []
 
         for band in self.s2_bands_use:
-    
+
             fn = glob.glob('%s*%s_%sm.jp2' %(img_path,band,resolution))
 
             if len(fn) > 1:
-
                 raise ValueError("Multiple bands named {} in blob container. One expected.".format(fn))
 
             else:
                 try:
-
                     fn = fn[0]
 
-                except: 
-                    raise IndexError("At least one band missing from S2 blob container")   
+                except:
+                    raise IndexError("At least one band missing from S2 blob container")        
             
             da_band = xr.open_rasterio(fn, chunks={self.NAME_x: 2000, self.NAME_y: 2000})
             crs = da_band.attrs['crs']
-            
             # Apply scaling factor
             da_band = da_band / self.l2a_scaling_factor
             da_band[self.NAME_bands] = band
@@ -138,6 +135,13 @@ class SurfaceClassifier:
 
         return albedo
 
+    def calculate_2DBA(self, S2vals):
+
+        Index2DBA = S2vals.Data.loc[{self.NAME_bands:'B05'}]/S2vals.Data.loc[{self.NAME_bands:'B04'}]
+        predict2DBA = 10E-35 * Index2DBA * np.exp(87.015*Index2DBA)
+
+        return Index2DBA, predict2DBA
+
     
     def combine_masks(self, S2vals):
         """ Combine ice mask and cloud masks """
@@ -175,9 +179,9 @@ class SurfaceClassifier:
 
         files = glob.glob(os.environ['PROCESS_DIR'] + '*.jp2') # grab current files
         file = files[0] #take first file from list
-        print(file[51:59]) # print year,month and day from the filename
+        print(file[52:60]) # print year,month and day from the filename
     
-        rowID = file[51:59] # make the date info from the filename rowID
+        rowID = file[52:60] # make the date info from the filename rowID
 
         print(rowID)
         print(tile.upper())
@@ -314,6 +318,3 @@ class SurfaceClassifier:
             LHF = None
 
             return total
-
-
-
