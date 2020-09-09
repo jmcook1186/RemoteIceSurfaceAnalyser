@@ -297,6 +297,7 @@ April 2020: revised cloud interpolation - now infills cloud NaNs with the layer 
 
 April 2020: system test revealed bug in multi-year runs. The interpolate_missing_date() function fails when iterating over multiple years or tiles other than 22wev. Need to investigate why this is happening. UPDATE: Fixed for multiple tiles - issue was accidental hardcoding of tile-specific folder in filepath.
 
+Aug 2020: Update system to include calculation of 2DBA index and 2DBA biomass prediction using equations from Wang et al. 2020. Also debugged DISORT LUT builder as there was an additional zero in the definition of one of the algal biomass concentrations (250000 instead of 25000 ppb). Also changed the summary statistics so that variable means and stds were calculated with pixels classed as SN, WAT or CC omitted.
 
 ## Contributions
 

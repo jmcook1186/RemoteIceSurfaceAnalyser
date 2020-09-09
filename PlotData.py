@@ -79,43 +79,50 @@ def plot_BandRatios(BandRatios, savepath):
     NDCI = BandRatios[BandRatios['Index']=='NCDI']
     MCI = BandRatios[BandRatios['Index']=='MCI']
     II = BandRatios[BandRatios['Index']=='II']
+    DBA2_2 = BandRatios[BandRatios['Index']=='2DBA2']
 
-    fig, (ax1,ax2,ax3,ax4,ax5) = plt.subplots(5,1,figsize = (5,15))
+    fig, axes = plt.subplots(2,3, figsize=(20,10))
     
     # plot each curve individually in first panel to enable
     # assigning labels to curves for legend
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'0ppb'], marker='x',label = '0')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'10000ppb'], marker='x',label = '10000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'20000ppb'], marker='x',label = '20000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'30000ppb'], marker='x',label = '30000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'40000ppb'], marker='x',label = '40000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'50000ppb'], marker='x',label = '50000 ppb')
-    ax1.legend(ncol=3,bbox_to_anchor=(1,1.3))
+    axes[0,0].plot(DBA2['Grain'], DBA2.loc[:,'0ppb'], marker='x',label = '0')
+    axes[0,0].plot(DBA2['Grain'], DBA2.loc[:,'10000ppb'], marker='x',label = '10000 ppb')
+    axes[0,0].plot(DBA2['Grain'], DBA2.loc[:,'20000ppb'], marker='x',label = '20000 ppb')
+    axes[0,0].plot(DBA2['Grain'], DBA2.loc[:,'30000ppb'], marker='x',label = '30000 ppb')
+    axes[0,0].plot(DBA2['Grain'], DBA2.loc[:,'40000ppb'], marker='x',label = '40000 ppb')
+    axes[0,0].plot(DBA2['Grain'], DBA2.loc[:,'50000ppb'], marker='x',label = '50000 ppb')
+    axes[0,0].legend(ncol=3,bbox_to_anchor=(1,1.3))
 
-    ax1.set_xticks(DBA2['Grain'])
-    ax1.set_xticklabels(DBA2['Grain'])
-    ax1.set_ylabel('Index Value: 2DBA')
+    axes[0,0].set_xticks(DBA2['Grain'])
+    axes[0,0].set_xticklabels(DBA2['Grain'])
+    axes[0,0].set_ylabel('Index Value: 2DBA')
 
-    ax2.plot(DBA2['Grain'], DBA3.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax2.set_xticks(DBA3['Grain'])
-    ax2.set_xticklabels(DBA3['Grain'])
-    ax2.set_ylabel('Index Value: 3DBA')
+    axes[0,1].plot(DBA2['Grain'], DBA3.loc[:,'0ppb':'50000ppb'], marker='x')
+    axes[0,1].set_xticks(DBA3['Grain'])
+    axes[0,1].set_xticklabels(DBA3['Grain'])
+    axes[0,1].set_ylabel('Index Value: 3DBA')
 
-    ax3.plot(DBA2['Grain'], NDCI.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax3.set_xticks(NDCI['Grain'])
-    ax3.set_xticklabels(NDCI['Grain'])
-    ax3.set_ylabel('Index Value: NCDI')
+    axes[0,2].plot(DBA2['Grain'], NDCI.loc[:,'0ppb':'50000ppb'], marker='x')
+    axes[0,2].set_xticks(NDCI['Grain'])
+    axes[0,2].set_xticklabels(NDCI['Grain'])
+    axes[0,2].set_ylabel('Index Value: NCDI')
 
-    ax4.plot(DBA2['Grain'], MCI.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax4.set_xticks(MCI['Grain'])
-    ax4.set_xticklabels(MCI['Grain'])
-    ax4.set_ylabel('Index Value: MCI')
+    axes[1,0].plot(DBA2['Grain'], MCI.loc[:,'0ppb':'50000ppb'], marker='x')
+    axes[1,0].set_xticks(MCI['Grain'])
+    axes[1,0].set_xticklabels(MCI['Grain'])
+    axes[1,0].set_ylabel('Index Value: MCI')
 
-    ax5.plot(DBA2['Grain'], II.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax5.set_xticks(II['Grain'])
-    ax5.set_xticklabels(II['Grain'])
-    ax5.set_ylabel('Index Value: II')
-    ax5.set_xlabel('Grain size (microns)')
+    axes[1,1].plot(DBA2['Grain'], II.loc[:,'0ppb':'50000ppb'], marker='x')
+    axes[1,1].set_xticks(II['Grain'])
+    axes[1,1].set_xticklabels(II['Grain'])
+    axes[1,1].set_ylabel('Index Value: II')
+    axes[1,1].set_xlabel('Grain size (microns)')
+
+    axes[1,2].plot(DBA2_2['Grain'], DBA2_2.loc[:,'0ppb':'50000ppb'], marker='x')
+    axes[1,2].set_xticks(II['Grain'])
+    axes[1,2].set_xticklabels(II['Grain'])
+    axes[1,2].set_ylabel('Index Value: 2DBA-2')
+    axes[1,2].set_xlabel('Grain size (microns)')
 
     fig.tight_layout()
     
@@ -1081,19 +1088,51 @@ def compare_vars_between_classes(DZ_Class):
     return
 
 
+
+def lin_regress():
+
+    import statsmodels.api as sm
+    import pandas as pd
+
+    DZ = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/WholeDZ.csv')
+    y = DZ['meanAlbedo']
+    X = DZ[['meanDensity(kgm-3)','meanGrain(um)']]
+    X = sm.add_constant(X)
+    model = sm.OLS(y, X)
+    results = model.fit()
+    print(results.summary())
+
+    return
+
+
 # Function Calls
 
 filepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/'
 savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Figures_and_Tables/'
 
 DZ, DZ_Class, wea, web, wec, wet, weu, wev, BandRatios = import_csvs(filepath,True,True,True)
-timeseries_STDerrorbars(DZ, wea, web, wec, wet, weu, wev, savepath)
+#timeseries_STDerrorbars(DZ, wea, web, wec, wet, weu, wev, savepath)
 
 # correlate_vars(DZ, savepath)
 # corr_heatmaps(DZ,DZ_Class,savepath)
-annual_trends(DZ,savepath)
+# annual_trends(DZ,savepath)
 # Latitudinal_trends(DZ, wea,web,wec,wev,weu,wet, savepath,\
 # anova_assumptions = True, KW_test = True)
 # plot_coverage(DZ, DZ_Class,savepath)
 # compare_vars_between_classes(DZ_Class)
+
+
+plot_BandRatios(BandRatios, savepath)
+
+
+# import statsmodels.api as sm
+# import pandas as pd
+
+# DZ = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/PROCESSED/WholeDZ.csv')
+# y = DZ['meanAlbedo']
+# X = DZ[['meanDensity(kgm-3)','meanGrain(um)']]
+# X = sm.add_constant(X)
+# model = sm.OLS(y, X)
+# results = model.fit()
+# print(results.summary())
 

@@ -335,7 +335,7 @@ def imageinterpolator(years, months, tile, proj_info):
     for i in np.arange(0, len(DateList), 1):
 
         if config.get('options','vm')=='True':
-            DateList[i] = DateList[i][66:-33]
+            DateList[i] = DateList[i][65:-34]
             DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
                                                                             6:8])  # format string to match format defined above
             DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
@@ -394,10 +394,6 @@ def imageinterpolator(years, months, tile, proj_info):
                 albFuture = imageFuture.albedo.values
                 classPast = imagePast.classified.values
                 classFuture = imageFuture.classified.values
-                Index2DBAPast = imagePast.Index2DBA.values
-                Index2DBAFuture = imageFuture.Index2DBA.values
-                predict2DBAPast = imagePast.predict2DBA.values
-                predict2DBAFuture = imageFuture.predict2DBA.values
                 grainPast = imagePast.grain_size.values
                 grainFuture = imageFuture.grain_size.values
                 densityPast = imagePast.density.values
@@ -410,10 +406,10 @@ def imageinterpolator(years, months, tile, proj_info):
                 maskFuture = np.isnan(albFuture)
                 combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
-                filenames = ['albedo','class','Index2DBA','predict2DBA','grain', 'density', 'algae']
+                filenames = ['albedo','class','grain', 'density', 'algae']
                 counter = 0
                 # loop through params calculating linear regression
-                for i,j in [(albPast,albFuture),(classPast,classFuture),(Index2DBAPast,Index2DBAFuture),(predict2DBAPast,predict2DBAFuture),(grainPast,grainFuture),(densityPast,densityFuture),(algaePast,algaeFuture)]:                 
+                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(algaePast,algaeFuture)]:                 
 
                     if counter == 1: # different function required for classification as it is not a continuous scale
                         
@@ -462,26 +458,21 @@ def imageinterpolator(years, months, tile, proj_info):
                         with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc')) as grain:
                             with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc')) as density:
                                 with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc')) as algae:
-                                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_Index2DBA.nc')) as Index2DBA:
-                                        with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_predict2DBA.nc')) as predict2DBA:
-                                    
                                         
-                                            # collate data into xarray dataset and copy metadata from PAST
-                                            newXR = xr.Dataset({
-                                                'classified': (['x', 'y'], surfclass.values),
-                                                'albedo': (['x', 'y'], albedo.values),
-                                                'Index2DBA':(['x','y'],Index2DBA.values),
-                                                'predict2DBA':(['x','y'],predict2DBA.values),
-                                                'grain_size': (['x', 'y'], grain.values),
-                                                'density': (['x', 'y'], density.values),
-                                                'algae': (['x', 'y'], algae.values),
-                                                'Icemask': (['x', 'y'], imagePast.Icemask),
-                                                'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                                                'FinalMask': (['x', 'y'], combinedMask),
-                                                proj_info.attrs['grid_mapping_name']: proj_info,
-                                                'longitude': (['x', 'y'], imagePast.longitude),
-                                                'latitude': (['x', 'y'], imagePast.latitude)
-                                            }, coords = {'x': imagePast.x, 'y': imagePast.y})
+                                    # collate data into xarray dataset and copy metadata from PAST
+                                    newXR = xr.Dataset({
+                                        'classified': (['x', 'y'], surfclass.values),
+                                        'albedo': (['x', 'y'], albedo.values),
+                                        'grain_size': (['x', 'y'], grain.values),
+                                        'density': (['x', 'y'], density.values),
+                                        'algae': (['x', 'y'], algae.values),
+                                        'Icemask': (['x', 'y'], imagePast.Icemask),
+                                        'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
+                                        'FinalMask': (['x', 'y'], combinedMask),
+                                        proj_info.attrs['grid_mapping_name']: proj_info,
+                                        'longitude': (['x', 'y'], imagePast.longitude),
+                                        'latitude': (['x', 'y'], imagePast.latitude)
+                                    }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
 
             else: # if disort retrieval toggled off
@@ -489,6 +480,7 @@ def imageinterpolator(years, months, tile, proj_info):
                 # extract the past and future albedo and classified layers.
                 albPast = imagePast.albedo.values
                 albFuture = imageFuture.albedo.values
+
 
                 # create mask
                 maskPast = np.isnan(albPast)
@@ -501,14 +493,8 @@ def imageinterpolator(years, months, tile, proj_info):
                 classPast = imagePast.classified.values
                 classFuture = imageFuture.classified.values
 
-                Index2DBAPast = imagePast.Index2DBA.values
-                Index2DBAFuture = imageFuture.Index2DBA.values
-
-                predict2DBAPast = imagePast.predict2DBA.values
-                predict2DBAFuture = imageFuture.predict2DBA.values
-
                 # loop through params calculating linear regression
-                for i,j in [(albPast,albFuture),(classPast,classFuture)(Index2DBAPast,Index2DBAFuture),(predict2DBAPast,predict2DBAFuture)]:
+                for i,j in [(albPast,albFuture),(classPast,classFuture)]:
 
                     if counter == 1:
                         # albedo change is used to determine whether the past or future class is assigned
@@ -550,16 +536,10 @@ def imageinterpolator(years, months, tile, proj_info):
                 albedo = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc'))
                 surfclass = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc'))
 
-                Index2DBA = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_Index2DBA'))
-                predict2DBA = xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_predict2DBA'))
-                                    
-
                 # collate data into xarray dataset and copy metadata from PAST
                 newXR = xr.Dataset({
                     'classified': (['x', 'y'], surfclass.values),
                     'albedo': (['x', 'y'], albedo.values),
-                    'Index2DBA':(['x','y'],Index2DBA.values),
-                    'predict2DBA':(['x','y'],predict2DBA.values),
                     'Icemask': (['x', 'y'], imagePast.Icemask),
                     'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
                     'FinalMask': (['x', 'y'], combinedMask),
@@ -571,8 +551,6 @@ def imageinterpolator(years, months, tile, proj_info):
 
                 albedo = None
                 surfClass = None
-                Index2DBA = None
-                predict2DBA = None
 
                 files = glob.glob(str(os.environ['PROCESS_DIR'] + 'interpolated_' + '*.nc'))
                 for f in files:
@@ -623,12 +601,11 @@ def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False
     outPath = savepath
 
     ds = xr.open_dataset(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
-    ds2 = ds.where
     
     # DEFINE SIZE OF OUT ARRAYS
     if config.get('options','retrieve_disort_params')=='True':
-        out = np.zeros(shape=(12,len(ds.date)))
-        outClass = np.zeros(shape=(13,len(ds.date),7))
+        out = np.zeros(shape=(8,len(ds.date)))
+        outClass = np.zeros(shape=(9,len(ds.date),7))
 
     else:
         out = np.zeros(shape=(2,len(ds.date)))
@@ -642,19 +619,15 @@ def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False
 
             date_i = dateList[i]
             # scalar outputs
-            out[0,i] = ds.albedo.sel(date=date_i).where(ds.classified>3).mean().values  # mean albedo across whole tile
-            out[1,i] = ds.albedo.sel(date=date_i).where(ds.classified>3).std().values # std albedo across whole tile
-            out[2,i] = ds.grain_size.sel(date=date_i).where(ds.classified>3).mean().values # mean grain size
-            out[3,i] = ds.grain_size.sel(date=date_i).where(ds.classified>3).std().values # std grain size
-            out[4,i] = ds.density.sel(date=date_i).where(ds.classified>3).mean().values # mean density
-            out[5,i] = ds.density.sel(date=date_i).where(ds.classified>3).std().values # std density
-            out[6,i] = ds.algae.sel(date=date_i).where(ds.classified>3).mean().values # mean algae
-            out[7,i] = ds.algae.sel(date=date_i).where(ds.classified>3).std().values # mean algae
-            out[8,i] - ds.Index2DBA.sel(date=date_i).where(ds.classified>3).mean().values # mean 2DBA index
-            out[9,i] - ds.Index2DBA.sel(date=date_i).where(ds.classified>3).std().values # STD 2DBA index
-            out[10,i] - ds.predict2DBA.sel(date=date_i).where(ds.classified>3).mean().values # mean 2DBA index
-            out[11,i] - ds.predict2DBA.sel(date=date_i).where(ds.classified>3).std().values # STD 2DBA index
-
+            out[0,i] = ds.albedo.sel(date=date_i).mean().values  # mean albedo across whole tile
+            out[1,i] = ds.albedo.sel(date=date_i).std().values # std albedo across whole tile
+            out[2,i] = ds.grain_size.sel(date=date_i).mean().values # mean grain size
+            out[3,i] = ds.grain_size.sel(date=date_i).std().values # std grain size
+            out[4,i] = ds.density.sel(date=date_i).mean().values # mean density
+            out[5,i] = ds.density.sel(date=date_i).std().values # std density
+            out[6,i] = ds.algae.sel(date=date_i).mean().values # mean algae
+            out[7,i] = ds.algae.sel(date=date_i).std().values # mean algae
+            
             # outputs by class
             for j in range(7):
 
@@ -667,14 +640,9 @@ def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False
                 outClass[6,i,j] = np.std(ds.density.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of density in each class
                 outClass[7,i,j] = np.mean(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of algae in each class
                 outClass[8,i,j] = np.std(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of algae in each class
-                outClass[9,i,j] = np.mean(ds.Index2DBA.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of 2dba index in each class
-                outClass[10,i,j] = np.std(ds.Index2DBA.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of 2dba index in each class
-                outClass[11,i,j] = np.mean(ds.predict2DBA.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of 2dba prediction in each class
-                outClass[12,i,j] = np.std(ds.predict2DBA.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of 2dba prediction in each class
-
-
-        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae','mean2DBAindex','STD2DBAindex','mean2DBApredict','STD2DBApredict'],'date':dateList})
-        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD','GrainMean','GrainSTD','DensityMean','DensitySTD','AlgaeMean','AlgaeSTD','Index2DBAMean','Index2DBASTD','Predict2DBAMean','Predict2DBASTD'], 'date':dateList,\
+        
+        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae'],'date':dateList})
+        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD','GrainMean','GrainSTD','DensityMean','DensitySTD','AlgaeMean','AlgaeSTD'], 'date':dateList,\
             'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
 
         outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))

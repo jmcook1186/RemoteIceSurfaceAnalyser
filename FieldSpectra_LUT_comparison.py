@@ -41,25 +41,22 @@ def grab_params():
 
     """
 
-    densities = [[400,400,400,400,400],[450,450,450,450,450],[500,500,500,500,500],\
-        [550,550,550,550,550],[600,600,600,600,600],[650,650,650,650,650],\
-            [700,700,700,700,700],[750,750,750,750,750],[800,800,800,800,800],\
-                [850,850,850,850,850],[900,900,900,900,900]]
+    densities = [400,450,500,550,600,650,700,750,800,850,900]
 
-    side_lengths = [[500,500,500,500,500],[700,700,700,700,700],[900,900,900,900,900],[1100,1100,1100,1100,1100],
-    [1300,1300,1300,1300,1300],[1500,1500,1500,1500,1500],[2000,2000,2000,2000,2000],[3000,3000,3000,3000,3000],
-    [5000,5000,5000,5000,5000],[8000,8000,8000,8000,8000],[10000,10000,10000,10000,10000],
-    [15000,15000,15000,15000,15000]]
+    side_lengths = [500,700,900,1100,1300,1500,2000,3000,5000,8000,10000,15000]
 
-    algae = [[0,0,0,0,0], [1000,0,0,0,0], [5000,0,0,0,0], [10000,0,0,0,0], [50000,0,0,0,0], [10000,0,0,0,0],\
-        [15000,0,0,0,0], [20000,0,0,0,0], [250000,0,0,0,0], [50000,0,0,0,0], [75000,0,0,0,0], [100000,0,0,0,0],\
-            [125000,0,0,0,0], [150000,0,0,0,0], [1750000,0,0,0,0], [200000,0,0,0,0], [250000,0,0,0,0]]
-
+    algae = [0,1000,5000,10000,15000,20000,25000,50000,75000,100000,125000,150000,175000,200000,250000]
 
 
     spectra = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv')
     LUT = np.load('/home/joe/Code/BigIceSurfClassifier/Process_Dir/LUT_cz05.npy')
-    params = []
+    
+    densityList = []
+    grainList = []
+    algaeList = []
+    filenames = []
+    index2DBA = []
+
     # reformat LUT: flatten LUT from 3D to 2D array with one column per combination
     # of RT params, one row per wavelength
 
@@ -68,9 +65,11 @@ def grab_params():
     idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
     LUT = LUT[:,idx] # reduce wavelengths to only the 9 that match the S2 image
 
+    
     for i in np.arange(0,len(spectra.columns),1):
         
         if i != 'wavelength':
+
             colname = spectra.columns[i]
             spectrum = np.array(spectra[colname][idx])
             error_array = abs(LUT - spectrum)
@@ -78,8 +77,69 @@ def grab_params():
             index = np.argmin(mean_error)
             param_idx = np.unravel_index(index,[len(densities),len(side_lengths),len(algae)])
 
-            params.append((densities[param_idx[0]],side_lengths[param_idx[1]],algae[param_idx[2]]))
+            filenames.append(colname)
+            densityList.append(densities[param_idx[0]])
+            grainList.append(side_lengths[param_idx[1]])
+            algaeList.append(algae[param_idx[2]])
+            index2DBA.append(spectrum[3]/spectrum[2])
+
+
+    (densities[param_idx[0]],side_lengths[param_idx[1]],algae[param_idx[2]])
+
+    Out = pd.DataFrame(columns=['filename','density','algae','index2DBA'])
+    Out['filename'] = filenames
+    Out['density'] = densityList
+    Out['algae'] = algaeList
+    Out['index2DBA'] = index2DBA
+
+
+    return
+
+def 2DBA_of_field_samples():
+
+
+    """
+    2DBA index calculated from field samples after field spectra are averaged over S2 band 4 and 5 wavelengths
+    weighted by the sensr spectral response function for each band. The index is then calculated as B5/B4
+    and the cell concentration predicted using Wang et al's (2018) conversion equation.
+
+    """
+
+    spectra = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv')
+    LUT = np.load('/home/joe/Code/BigIceSurfClassifier/Process_Dir/LUT_cz05.npy')
+    LUT = LUT.reshape(2244,len(wavelengths))
     
+    # reformat LUT: flatten LUT from 3D to 2D array with one column per combination
+    # of RT params, one row per wavelength
+    
+    responsefunc = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/S2SpectralResponse.csv')
+    func04 = responsefunc['B4'].loc[(responsefunc['SR_WL']>650)&(responsefunc['SR_WL']<=680)]
+    func05 = responsefunc['B5'].loc[(responsefunc['SR_WL']>698)&(responsefunc['SR_WL']<=713)]
+
+    filenames = []
+    Idx2DBAList =[]
+    prd2DBAList = []
+
+    for i in np.arange(0,len(spectra.columns),1):
+        
+        if i != 'Wavelength':
+
+            colname = spectra.columns[i]
+            spectrum = np.array(spectra[colname])
+            B04 = np.mean(spectrum[300:330] * func04)
+            B05 = np.mean(spectrum[348:363] * func05)
+            Idx2DBA = B05/B04
+            prd2DBA = 10E-35 * Idx2DBA * np.exp(87.015*Idx2DBA)
+
+            filenames.append(colname)
+            Idx2DBAList.append(Idx2DBA)
+            prd2DBAList.append(prd2DBA)
+
+    Out = pd.DataFrame(columns=['filename','2DBAIdx','2DBAPrediction'])
+    Out['filename'] = filenames
+    Out['2DBAIdx'] = Idx2DBAList
+    Out['2DBAPrediction'] = prd2DBAList
+
 
     return
 
