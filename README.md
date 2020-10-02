@@ -8,6 +8,12 @@ This code is controlled using a .template file that is pre-configured for the so
 
 Imagery is downloaded from a MS Azure blob container populated with Sentinel-2 level-2A products for Jun-August 2016-2019. To extend this to more recent dates the code must either be linked to a different image repository or the image downloading and processing scripts provided here used to add more imagery to the existing blob container.
 
+## Model Overview
+
+![Model Schematic](BISC_OUT/Figures_and_Tables/BISC_schematic.png)
+
+The schematic above shows the main flows between mdel components. Rectangles with white backgrounds are scripts that do some data processing or transformation. Rectangles with light grey backgrounds are input data. Rectangles with orange backgrounds are intermediate data products. Retangles with red backgrounds are model outputs. Arrows indicate flow of data from one component to the next. I have tried to loosely colour code to make it easier to follow and isolate sub-loops within the main model structure.
+
 ## Setup
 
 ### Hardware
