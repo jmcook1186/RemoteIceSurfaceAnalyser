@@ -1,10 +1,12 @@
 # Big Ice Surf Classifier
 
-This repository contains in-development code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Maps for each parameter are saved as jpgs and the summary data are saved as netcdf files for each tile.
+This repository contains code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user-defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Additional scripts are provided for generating summary statistics and plotting maps for each parameter.
 
-The South Western Greenland Ice Sheet Dark Zone is contained within the following five tiles, spanning 64 - 70 degrees N:
+This code is controlled using a .template file that is pre-configured for the south-west Greenland Ice Sheet between 65-70N. This area is contained within the following five tiles:
 
 22WEA, 22WEB, 22WEC, 22WET, 22WEU, 22WEV
+
+Imagery is downloaded from a MS Azure blob container populated with Sentinel-2 level-2A products for Jun-August 2016-2019. To extend this to more recent dates the code must either be linked to a different image repository or the image downloading and processing scripts provided here used to add more imagery to the existing blob container.
 
 ## Setup
 
@@ -115,13 +117,13 @@ Big Ice Surf Classifier
 |----- .azure_secret
 |----- .cscihub_secret
 |
-|-----BISC_OUT
+|-----BISC_OUT  (this directory is for output data)
 |           |
-|           |---will be populated with .nc files
+|           |---will be populated with .nc and .csv files
 |           |
-|           |---PROCESSED
+|           |---Figures_and_Tables
 |                   |
-|                   |---will be populated with output csvs
+|                   |---will be populated with outputs
 |
 |
 |-----Process_Dir
@@ -158,6 +160,7 @@ Note that since August 2019 any Sentinel-2 imagery older than 18 months is no lo
 Also, note that the downloading sometimes fails on multi-month runs. I have not been able to diagnose why exactly this occurs but becaue the program does not crash or return any exceptions, it simply hangs at the end of each month, I suspect the issue is server-side. The workaround is to download one month's worth of imagery at a time.
 
 ## How to run
+
 Once the desired imagery has been downloaded, processed and stored in an Azure container, the next step is running the classification, albedo, snicar retrieval and spatial/temporal interpolation algorithms. These are configured by altering the template file.
 
 Before you begin, make sure you have created a `template` file containing the settings for your desired workflow, and that you have set the environment variables needed by the workflow (see 'Setup' above).
@@ -171,6 +174,18 @@ To start the main program, run
 `python run_classifier.py <template.template>`.
 
 The configuration details will automatically be saved to a text file (BISC_Param_Log.txt). A list of the tile/date combinations that are discarded due to QC flags or download errors are saved to csv files (aborted_downloads.csv, rejected_by_qc.csv) and so is a list of all tile/date combinations successfully analysed (good_tiles.csv). Output data will automatically upload to Azure storage containers (see "Outputs" below).
+
+After the main script has run and the output data has been generates, some manual running of scripts is required to reformat the output data and generate summary statistics and maps. This begns with running the file "data_reducer.py". This script separates the large "FULL_OUTPUT...nc" files into individual variables that are easier to manage. The same script also discards dates that did not pass a manual quality control. The resulting reduced datasets are saved in the BISC_OUT folder and are used to generate the maps and summary statistics.
+
+The analysis and plotting are achieved using the script "BISC_plot_figures.py". There are several functions in that script that can be called with user defined variables for generating the various maps, plots and summary datasets.
+
+There are also additional scripts provided that enable model validation and other associated analyses, including comparisons between modelled and measured cell concentrations (FieldSpectra_LUT_comparison.py) and for building the spectral lookup table (LUTbuilder.py, must be run as part of separate repository bioDISORTpy).
+
+## Example Outputs
+
+![Output Maps](BISC_OUT/Figures_and_Tables/Fig4_draft.jpg)
+
+The maps, histograms and colorbar in the above figure are all outputs from BISC_plot_figures.py. They have been collated and organised into a single figure manually using illustration software. Subplot A shows a true-colour composite of the SW GrIS with some particularly low albedo areas marked. Subplot B shows the summer-mean algal cell concentration predicted using the inverted RTM for 2016, 2017, 2018 and 2019. The histograms show the frequency distribution of algal cell concentrations in individual pixels across the area shown in A and B.
 
 ## Functionality
 

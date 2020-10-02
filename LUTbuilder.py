@@ -123,9 +123,9 @@ density = [[400,400,400,400,400],[450,450,450,450,450],[500,500,500,500,500],
 rad = [[500,500,500,500,500],[700,700,700,700,700],[900,900,900,900,900],[1100,1100,1100,1100,1100],
 [1300,1300,1300,1300,1300],[1500,1500,1500,1500,1500],[2000,2000,2000,2000,2000],[3000,3000,3000,3000,3000],
 [5000,5000,5000,5000,5000],[8000,8000,8000,8000,8000],[10000,10000,10000,10000,10000],
-[15000,15000,15000,15000,15000],[20000,20000,20000,20000,20000],[25000,25000,25000,25000,25000],[30000,30000,30000,30000,30000]]
+[15000,15000,15000,15000,15000]]
 
-algae = [0, 1000, 5000, 10000, 15000, 20000, 250000, 50000, 75000, 100000, 125000, 150000, 1750000, 200000]
+algae = [0, 1000, 5000, 10000, 50000, 10000, 15000, 20000, 25000, 50000, 75000, 100000, 125000, 150000, 175000, 200000, 250000]
 
 
 ########################################
@@ -208,7 +208,7 @@ for i in np.arange(0,len(density),1):
             uTau = 0.  # optical thickness where fluxes are calculated
             Nstr = 16  # number of streams to include in model
             fbeam = flx_slr  # incoming irradiance (output by SNICAR)
-            umu0 = 0.7 # cosine of solar zenith angle 
+            umu0 = 0.3 # cosine of solar zenith angle 
 
             # loop through wavelengths, isolate appropriate value from wavelength-resolved params
             for p in range(len(wvl)):  # iterate over wavelength
@@ -236,4 +236,4 @@ for i in np.arange(0,len(density),1):
             if counter % progress_step == 0:
                 print("Progress = {} / {}".format(counter, total_runs))
 
-np.save(str(save_path+'LUT_cz07.npy'),result)
+np.save(str(save_path+'LUT_cz03.npy'),result)
