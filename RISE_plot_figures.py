@@ -1,6 +1,6 @@
 """
 
-After main BISC code has been run and the output directory populated with .nc datasets, this script
+After main RISE code has been run and the output directory populated with .nc datasets, this script
 can be run to plot the desired outputs. The prerequisite is .nc files in the process_dir/output/ directory.
 
 NOTE: best not to run this script in VScode as it tend to persist the "dark theme" of the editor into 
@@ -341,7 +341,7 @@ def annual_histograms(path, var, year):
 
 def plot_BandRatios(savepath):
 
-    BandRatios = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/BandRatios.csv')
+    BandRatios = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/RISE_OUT/BandRatios.csv')
 
     DBA2 = BandRatios[BandRatios['Index']=='2DBA']
     DBA3 = BandRatios[BandRatios['Index']=='3DBA']
@@ -412,7 +412,7 @@ def add_boxes_to_rgb():
 
     ax.imshow(im)
 
-    plt.savefig('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/rgb_boxes.jpg',dpi=300)
+    plt.savefig('/home/joe/Code/BigIceSurfClassifier/RISE_OUT/rgb_boxes.jpg',dpi=300)
 
     return
 
@@ -653,7 +653,7 @@ def colorbar(vmin, vmax, cmap):
 # USER DEFINED VARIABLES
 year = '2019'
 var='algae'
-path = str('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/')
+path = str('/home/joe/Code/BigIceSurfClassifier/RISE_OUT/')
 dpi = 300
 vmin = 0
 vmax = 200000

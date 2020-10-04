@@ -1,4 +1,4 @@
-# Big Ice Surf Classifier
+# RISE: Remote Ice Surface Explorer
 
 This repository contains code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user-defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Additional scripts are provided for generating summary statistics and plotting maps for each parameter.
 
@@ -10,7 +10,7 @@ Imagery is downloaded from a MS Azure blob container populated with Sentinel-2 l
 
 ## Model Overview
 
-![Model Schematic](BISC_OUT/Figures_and_Tables/BISC_schematic.png)
+![Model Schematic](RISE_OUT/Figures_and_Tables/RISE_schematic.png)
 
 The schematic above shows the main flows between mdel components. Rectangles with white backgrounds are scripts that do some data processing or transformation. Rectangles with light grey backgrounds are input data. Rectangles with orange backgrounds are intermediate data products. Retangles with red backgrounds are model outputs. Arrows indicate flow of data from one component to the next. I have tried to loosely colour code to make it easier to follow and isolate sub-loops within the main model structure.
 
@@ -56,7 +56,7 @@ And for Copernicus SciHub:
     user=
     password=
 
-Create your `PROCESS_DIR`, e.g. `/scratch/BigSurfClass/`. The `PROCESS_DIR` is the folder where temporary files, images and eventually the output data are stored. The pickled classifier and mask should also be saved to the `PROCESS_DIR` in advance of running the classifier script.
+Create your `PROCESS_DIR`, e.g. `/scratch/RISE/`. The `PROCESS_DIR` is the folder where temporary files, images and eventually the output data are stored. The pickled classifier and mask should also be saved to the `PROCESS_DIR` in advance of running the classifier script.
 
 The simplest way to set these environment variables is to use a shell script. An example, `setup_classifier.sh`, has been provided with this repository. Make a copy that you can modify to suit your environment. The copy should not be committed back to this repository.
 
@@ -91,6 +91,7 @@ Options:
     
 
 Thresholds:
+
 1) minArea: integer to determine the minimum amount of the total image area that should be covered by ice (as opposed to tundra, ocean etc) for the image to be deemed acceptable quality to proceedwith analysis
 2) cloudCoverThresh: integer to define the minimum probability of a pixel being obscured by cloud - if the probability is greater than this value, the pixel will be considered cloudy and interpolated over if interpolate_cloud is toggled on, or left as NaN if interpolate_cloud is toggled off. If the probability is less than this threshold, the pixel is considered clear and used in the analysis.
 
@@ -105,12 +106,12 @@ predicted_legend: text labels for each numerically labelled class (e.g. "Snow:1;
 The directories should be arranged as follows. It is critical that this structure is maintained else paths will fail.
 
 ```
-Big Ice Surf Classifier
+Remote Ice Surface Explorer
 |
 |----- run_classifier.py
 |----- Big_Sentinel_Classifier.py
-|----- BISC_param_Log.txt
-|----- BISC_plot_figures.py
+|----- RISE_param_Log.txt
+|----- RISE_plot_figures.py
 |----- download_process_s2.py
 |----- ebmodel.py
 |----- environment.yml
@@ -123,7 +124,7 @@ Big Ice Surf Classifier
 |----- .azure_secret
 |----- .cscihub_secret
 |
-|-----BISC_OUT  (this directory is for output data)
+|-----RISE_OUT  (this directory is for output data)
 |           |
 |           |---will be populated with .nc and .csv files
 |           |
@@ -179,19 +180,19 @@ To start the main program, run
 
 `python run_classifier.py <template.template>`.
 
-The configuration details will automatically be saved to a text file (BISC_Param_Log.txt). A list of the tile/date combinations that are discarded due to QC flags or download errors are saved to csv files (aborted_downloads.csv, rejected_by_qc.csv) and so is a list of all tile/date combinations successfully analysed (good_tiles.csv). Output data will automatically upload to Azure storage containers (see "Outputs" below).
+The configuration details will automatically be saved to a text file (RISE_Param_Log.txt). A list of the tile/date combinations that are discarded due to QC flags or download errors are saved to csv files (aborted_downloads.csv, rejected_by_qc.csv) and so is a list of all tile/date combinations successfully analysed (good_tiles.csv). Output data will automatically upload to Azure storage containers (see "Outputs" below).
 
-After the main script has run and the output data has been generates, some manual running of scripts is required to reformat the output data and generate summary statistics and maps. This begns with running the file "data_reducer.py". This script separates the large "FULL_OUTPUT...nc" files into individual variables that are easier to manage. The same script also discards dates that did not pass a manual quality control. The resulting reduced datasets are saved in the BISC_OUT folder and are used to generate the maps and summary statistics.
+After the main script has run and the output data has been generates, some manual running of scripts is required to reformat the output data and generate summary statistics and maps. This begns with running the file "data_reducer.py". This script separates the large "FULL_OUTPUT...nc" files into individual variables that are easier to manage. The same script also discards dates that did not pass a manual quality control. The resulting reduced datasets are saved in the RISE_OUT folder and are used to generate the maps and summary statistics.
 
-The analysis and plotting are achieved using the script "BISC_plot_figures.py". There are several functions in that script that can be called with user defined variables for generating the various maps, plots and summary datasets.
+The analysis and plotting are achieved using the script "RISE_plot_figures.py". There are several functions in that script that can be called with user defined variables for generating the various maps, plots and summary datasets.
 
 There are also additional scripts provided that enable model validation and other associated analyses, including comparisons between modelled and measured cell concentrations (FieldSpectra_LUT_comparison.py) and for building the spectral lookup table (LUTbuilder.py, must be run as part of separate repository bioDISORTpy).
 
 ## Example Outputs
 
-![Output Maps](BISC_OUT/Figures_and_Tables/Fig4_draft.jpg)
+![Output Maps](RISE_OUT/Figures_and_Tables/Fig4_draft.jpg)
 
-The maps, histograms and colorbar in the above figure are all outputs from BISC_plot_figures.py. They have been collated and organised into a single figure manually using illustration software. Subplot A shows a true-colour composite of the SW GrIS with some particularly low albedo areas marked. Subplot B shows the summer-mean algal cell concentration predicted using the inverted RTM for 2016, 2017, 2018 and 2019. The histograms show the frequency distribution of algal cell concentrations in individual pixels across the area shown in A and B.
+The maps, histograms and colorbar in the above figure are all outputs from RISE_plot_figures.py. They have been collated and organised into a single figure manually using illustration software. Subplot A shows a true-colour composite of the SW GrIS with some particularly low albedo areas marked. Subplot B shows the summer-mean algal cell concentration predicted using the inverted RTM for 2016, 2017, 2018 and 2019. The histograms show the frequency distribution of algal cell concentrations in individual pixels across the area shown in A and B.
 
 ## Functionality
 
@@ -258,7 +259,7 @@ There is a range of metadata output by the scripts, including text files detaili
 ## Output Data Post-processing
 
 The script post-processing.py is available for wrangling the summary data. The main program saves two netCDF files to the Azure storage container for each tile/year. The first is simple summary statistics including the mean and standard deviation of the albedo, grain size, algal concentration, ice density, dust concentration and the retrieval date. The second contains the same metrics but divided by the surface class as predicted by the random forest classifier (ie mean albedo for HA, standard deviation of algal concentration for LA etc. etc.)
-The post-processing script concatenates all of this data into a convenient .csv file that can be easily interrogated using Pandas or exported to a spreadsheet program. These are automatically saved to /BigIceSurfClassifier/BISC_OUT/PROCESSED/.
+The post-processing script concatenates all of this data into a convenient .csv file that can be easily interrogated using Pandas or exported to a spreadsheet program. These are automatically saved to /BigIceSurfClassifier/RISE_OUT/PROCESSED/.
 
 ## Plotting
 
@@ -278,7 +279,7 @@ BEWARE since August 2019 Copernicus moved all products older than 18 months to a
 This error likely results from having surplus .jp2 images in the process directory. This can happen when a previous run was aborted before the clear_process_dir() function was run, or when the user has added files accidentally, because that can cause multiple files to be returned by the glob in the load_img_to_xr() function which should only return unique filenames. To resolve, clear the .jp2 files from the process directory and retry.
 
 ### Black backgrounds in saved figures
-This code probably shouldn't be run in an interactive (e.g. ipython/jupyter) environment anyway, but in case it is used in this way it is worth noting that running the code in a jupyer interactive session in VSCode with the dark theme enabled will cause the saved figures to have black backgrounds, as the "dark theme" is persisted in preference to any mpl configurations set in the code. It is easy to avoid this by running the BISC_plot_figures.py script directly from the terminal (recommended), or using a different IDE (PyCharm works).
+This code probably shouldn't be run in an interactive (e.g. ipython/jupyter) environment anyway, but in case it is used in this way it is worth noting that running the code in a jupyer interactive session in VSCode with the dark theme enabled will cause the saved figures to have black backgrounds, as the "dark theme" is persisted in preference to any mpl configurations set in the code. It is easy to avoid this by running the RISE_plot_figures.py script directly from the terminal (recommended), or using a different IDE (PyCharm works).
 
 ### permission error in netcdf save
 This likely results from a path error, check that the folder structure on the machine running the code is consistent with that in this README.
@@ -314,7 +315,7 @@ Dec 19th 2019: VM disk space being used up. Changed workflow so that .nc files a
 
 Dec 19th 2019: added zipped folder of PROMICE AWS data for three sites to the repo. Intention is to use these data to provide input data to the eb model.
 
-March 2020: added 1TB disk to VM - named "datadrive". BISC code now run from datadrive to ensure sufficient disk space for collating output netCDFs without relying on constantly up and downloading from blobs.
+March 2020: added 1TB disk to VM - named "datadrive". RISE code now run from datadrive to ensure sufficient disk space for collating output netCDFs without relying on constantly up and downloading from blobs.
 
 March 2020: updated outputs. Now collates individual tiles into a multifile xarray dataset and saves to netcdf. Data summary is also saved as netcdf in the output folder. Much neater and more navigable output file structure.
 
