@@ -39,7 +39,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sentinel2_tools
 import sentinel2_azure
-import Big_Sentinel_Classifier
+import Ice_Surface_Analyser
 import xr_cf_conventions
 import multiprocessing as mp
 import gc
@@ -59,7 +59,7 @@ azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
                                     azure_cred.get('account', 'key'))
 
 # Open classifier
-bsc = Big_Sentinel_Classifier.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
+isa = Ice_Surface_Analyser.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
 
 # set up empty lists and dataframes to append to
 download_problem_list = []  # empty list to append details of skipped tiles due to missing info
@@ -177,16 +177,16 @@ for tile in tiles:
                 print("\n NO FLAGS, proceeding with image analysis for {}, {}".format(tile,date))
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, np.round(useable_area,2)))
 
-                s2xr = bsc.load_img_to_xr(os.environ['PROCESS_DIR'],
+                s2xr = isa.load_img_to_xr(os.environ['PROCESS_DIR'],
                                           int(config.get('options', 'resolution')),
                                           Icemask,
                                           Cloudmask)
 
                 # apply classifier and calculate albedo
-                predicted = bsc.classify_image(s2xr, savepath, tile, date, savefigs=True)
-                albedo = bsc.calculate_albedo(s2xr)
-                Index2DBA, predict2DBA = bsc.calculate_2DBA(s2xr)
-                mask2 = bsc.combine_masks(s2xr)
+                predicted = isa.classify_image(s2xr, savepath, tile, date, savefigs=True)
+                albedo = isa.calculate_albedo(s2xr)
+                Index2DBA, predict2DBA = isa.calculate_2DBA(s2xr)
+                mask2 = isa.combine_masks(s2xr)
                 
                 # 1) Retrieve projection info from S2 datafile and add to netcdf
                 proj_info = xr_cf_conventions.create_grid_mapping(s2xr.Data.attrs['crs'])
@@ -266,7 +266,7 @@ for tile in tiles:
 
                     idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
 
-                    bsc.invert_disort(s2xr,mask2,predicted,side_lengths,densities,algae,wavelengths,idx, tile, year, month)
+                    isa.invert_disort(s2xr,mask2,predicted,side_lengths,densities,algae,wavelengths,idx, tile, year, month)
 
                     # Add metadata to retrieved disort parameter arrays + mask
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:

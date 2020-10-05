@@ -22,7 +22,7 @@ retrieve_disort_params=True
 interpolate_cloud=True
 ; interpolate to infill missing tiles
 interpolate_missing_tiles=True
-; run energy balance model to predict melt?
+; run energy balance model to predict melt? (NONFUNCTIONAL)
 calculate_melt=False
 ; reduce temporal resolution of outData?
 downsample_outData=True
