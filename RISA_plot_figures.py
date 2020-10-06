@@ -3,8 +3,12 @@
 After main RISA code has been run and the output directory populated with .nc datasets, this script
 can be run to plot the desired outputs. The prerequisite is .nc files in the process_dir/output/ directory.
 
-NOTE: best not to run this script in VScode as it tend to persist the "dark theme" of the editor into 
-the saved figures, over-riding kwargs in cals to pyplot. Best to run this in Pycharm or from terminal.
+These .nc files are produced by running the full RISA model, which populates the Azure blob container with
+large .nc files names "FULL_OUTPUT....nc". These are then reduced down to individual variables/dates using the
+script "data_reducer.py". This produces multiple smaller (5-8 GB) output files that are used by this
+script to generate the relevant maps and figures. Recommend the RISA model and data reducer are run on 
+an Azure VM and not locally as the time and memory requirements are large. The reduced files could potentially
+be transferred to a local machine for plotting if necessary.
 
 """
 
@@ -23,6 +27,20 @@ plt.style.use('tableau-colorblind10')
 
 
 def JJA_maps(path, var, year, vmin, vmax, dpi=300):
+
+    """
+    Function produces a 3-subplot figure where each subplot is the mean for
+    variable "var" over June, July or August in the year defined in variable "year".
+
+    params:
+    path: path to save file to
+    var: variable to plot (algae, grain_size, density, predict2BDA)
+    year: year to plot (2016,2017,2018,2019)
+
+    returns:
+    none, but figure saved to path
+
+    """
 
     wea = xr.open_dataset(str(path+'REDUCED_{}_22wea_{}.nc'.format(var,year)))
     web = xr.open_dataset(str(path+'REDUCED_{}_22web_{}.nc'.format(var,year)))
@@ -142,6 +160,20 @@ def JJA_maps(path, var, year, vmin, vmax, dpi=300):
 
 
 def JJA_stats(path, var, year):
+    
+    """
+    Function calculates coverage statstics for each month in given variable/year 
+    combination
+    
+    params:
+    path: path to save file to
+    var: variable to plot (algae, grain_size, density, predict2BDA)
+    year: year to plot (2016,2017,2018,2019)
+
+    returns:
+    mean and std printed to terminal
+
+    """
 
     wea = xr.open_dataset(str(path+'REDUCED_{}_22wea_{}.nc'.format(var,year)))
     web = xr.open_dataset(str(path+'REDUCED_{}_22web_{}.nc'.format(var,year)))
@@ -211,6 +243,19 @@ def JJA_stats(path, var, year):
 
 
 def annual_stats(path, var, year):
+
+    """
+    Function calculates annual coverage statstics for given variable
+    
+    params:
+    path: path to save file to
+    var: variable to plot (algae, grain_size, density, predict2BDA)
+    year: year to plot (2016,2017,2018,2019)
+
+    returns:
+    mean and std printed to terminal
+
+    """
     
     wea = xr.open_dataset(str(path+'REDUCED_{}_22wea_{}.nc'.format(var,year)))
     web = xr.open_dataset(str(path+'REDUCED_{}_22web_{}.nc'.format(var,year)))
@@ -263,7 +308,22 @@ def annual_stats(path, var, year):
 
 
 def annual_maps(path, var, year, vmin, vmax, dpi=300):
+    """
+    Function plots single panel figure for the annual mean for given variable "var"
+
     
+    params:
+    path: path to save file to
+    var: variable to plot (algae, grain_size, density, predict2BDA)
+    year: year to plot (2016,2017,2018,2019)
+    vmin = minimum value for colorbar
+    vmax = maximum value for colorbar
+    dpi = dots per inch, resolution to save
+
+    returns:
+    none, figure saved to path
+
+    """
     wea = xr.open_dataset(str(path+'REDUCED_{}_22wea_{}.nc'.format(var,year)))
     web = xr.open_dataset(str(path+'REDUCED_{}_22web_{}.nc'.format(var,year)))
     wec = xr.open_dataset(str(path+'REDUCED_{}_22wec_{}.nc'.format(var,year)))
@@ -311,6 +371,19 @@ def annual_maps(path, var, year, vmin, vmax, dpi=300):
 
 def annual_histograms(path, var, year):
 
+    """
+    Function plots frequency histogram for given variable/date combination
+
+    
+    params:
+    path: path to save file to
+    var: variable to plot (algae, grain_size, density, predict2BDA)
+    year: year to plot (2016,2017,2018,2019)
+
+    returns:
+    none, figure saved to path
+
+    """
     wea = xr.open_dataset(str(path+'REDUCED_{}_22wea_{}.nc'.format(var,year)))
     web = xr.open_dataset(str(path+'REDUCED_{}_22web_{}.nc'.format(var,year)))
     wec = xr.open_dataset(str(path+'REDUCED_{}_22wec_{}.nc'.format(var,year)))
@@ -326,7 +399,7 @@ def annual_histograms(path, var, year):
     wev_mean = wev[var].mean(dim='date')
 
     tot = xr.merge([wea_mean,web_mean,wec_mean,wet_mean,weu_mean,wev_mean])
-    tot = tot/0.94 *(1/0.917)/10
+    tot = tot/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
 
     plt.hist(np.ravel(tot.to_array()),bins=100)
     plt.xlim(0, 30000)
@@ -339,56 +412,77 @@ def annual_histograms(path, var, year):
 
 
 
-def plot_BandRatios(savepath):
+def plot_BandRatios(savepath,dpi):
+    
+    """
+    Function plots values of band ratio indexes for
+    range of grain size/algal concentration combinations to
+    6 panel figure.
 
-    BandRatios = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/RISA_OUT/BandRatios.csv')
+    
+    params:
+    savepath: path to save file to
+    dpi = dots per inch, resolution to save
+
+    returns:
+    none, figure saved to path
+
+    """
+
+    BandRatios = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/BandRatios.csv')
 
     DBA2 = BandRatios[BandRatios['Index']=='2DBA']
     DBA3 = BandRatios[BandRatios['Index']=='3DBA']
     NDCI = BandRatios[BandRatios['Index']=='NCDI']
     MCI = BandRatios[BandRatios['Index']=='MCI']
     II = BandRatios[BandRatios['Index']=='II']
+    DBA2_2 = BandRatios[BandRatios['Index']=='2DBA2']
 
-    fig, (ax1,ax2,ax3,ax4,ax5) = plt.subplots(5,1,figsize = (5,15))
+    fig, ax = plt.subplots(3,2,figsize=(10,8))
     
     # plot each curve individually in first panel to enable
     # assigning labels to curves for legend
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'0ppb'], marker='x',label = '0')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'10000ppb'], marker='x',label = '10000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'20000ppb'], marker='x',label = '20000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'30000ppb'], marker='x',label = '30000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'40000ppb'], marker='x',label = '40000 ppb')
-    ax1.plot(DBA2['Grain'], DBA2.loc[:,'50000ppb'], marker='x',label = '50000 ppb')
-    ax1.legend(ncol=3,bbox_to_anchor=(1,1.3))
+    ax[0,0].plot(DBA2['Grain'], DBA2.loc[:,'0ppb'], marker='x',label = '0')
+    ax[0,0].plot(DBA2['Grain'], DBA2.loc[:,'10000ppb'], marker='x',label = '10000 ppb')
+    ax[0,0].plot(DBA2['Grain'], DBA2.loc[:,'20000ppb'], marker='x',label = '20000 ppb')
+    ax[0,0].plot(DBA2['Grain'], DBA2.loc[:,'30000ppb'], marker='x',label = '30000 ppb')
+    ax[0,0].plot(DBA2['Grain'], DBA2.loc[:,'40000ppb'], marker='x',label = '40000 ppb')
+    ax[0,0].plot(DBA2['Grain'], DBA2.loc[:,'50000ppb'], marker='x',label = '50000 ppb')
+    ax[0,0].legend(ncol=3,bbox_to_anchor=(1,1.3))
 
-    ax1.set_xticks(DBA2['Grain'])
-    ax1.set_xticklabels(DBA2['Grain'])
-    ax1.set_ylabel('Index Value: 2DBA')
+    ax[0,0].set_xticks(DBA2['Grain'])
+    ax[0,0].set_xticklabels(DBA2['Grain'])
+    ax[0,0].set_ylabel('Index Value: 2DBA')
 
-    ax2.plot(DBA2['Grain'], DBA3.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax2.set_xticks(DBA3['Grain'])
-    ax2.set_xticklabels(DBA3['Grain'])
-    ax2.set_ylabel('Index Value: 3DBA')
+    ax[0,1].plot(DBA2['Grain'], DBA3.loc[:,'0ppb':'50000ppb'], marker='x')
+    ax[0,1].set_xticks(DBA3['Grain'])
+    ax[0,1].set_xticklabels(DBA3['Grain'])
+    ax[0,1].set_ylabel('Index Value: 3DBA')
 
-    ax3.plot(DBA2['Grain'], NDCI.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax3.set_xticks(NDCI['Grain'])
-    ax3.set_xticklabels(NDCI['Grain'])
-    ax3.set_ylabel('Index Value: NCDI')
+    ax[1,0].plot(DBA2['Grain'], NDCI.loc[:,'0ppb':'50000ppb'], marker='x')
+    ax[1,0].set_xticks(NDCI['Grain'])
+    ax[1,0].set_xticklabels(NDCI['Grain'])
+    ax[1,0].set_ylabel('Index Value: NCDI')
 
-    ax4.plot(DBA2['Grain'], MCI.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax4.set_xticks(MCI['Grain'])
-    ax4.set_xticklabels(MCI['Grain'])
-    ax4.set_ylabel('Index Value: MCI')
+    ax[1,1].plot(DBA2['Grain'], MCI.loc[:,'0ppb':'50000ppb'], marker='x')
+    ax[1,1].set_xticks(MCI['Grain'])
+    ax[1,1].set_xticklabels(MCI['Grain'])
+    ax[1,1].set_ylabel('Index Value: MCI')
 
-    ax5.plot(DBA2['Grain'], II.loc[:,'0ppb':'50000ppb'], marker='x')
-    ax5.set_xticks(II['Grain'])
-    ax5.set_xticklabels(II['Grain'])
-    ax5.set_ylabel('Index Value: II')
-    ax5.set_xlabel('Grain size (microns)')
+    ax[2,0].plot(DBA2['Grain'], II.loc[:,'0ppb':'50000ppb'], marker='x')
+    ax[2,0].set_xticks(II['Grain'])
+    ax[2,0].set_xticklabels(II['Grain'])
+    ax[2,0].set_ylabel('Index Value: II')
+    ax[2,0].set_xlabel('Grain size (microns)')
+
+    ax[2,1].plot(DBA2_2['Grain'], II.loc[:,'0ppb':'50000ppb'], marker='x')
+    ax[2,1].set_xticks(II['Grain'])
+    ax[2,1].set_xticklabels(II['Grain'])
+    ax[2,1].set_ylabel('Index Value: 2BDA_2')
+    ax[2,1].set_xlabel('Grain size (microns)')
 
     fig.tight_layout()
-    
-    plt.savefig(str(savepath+'/BandRatios.png'),dpi=300)
+    plt.savefig(str(savepath+'/BandRatios.png'),dpi=dpi)
 
     return
 
@@ -479,17 +573,17 @@ def time_series(path, var):
         df2.date = ds2.date.values      
         df2.date = pd.to_datetime(df2.date)
 
-        df.area1 = np.array(area1means)/0.94 *(1/0.917)/10
+        df.area1 = np.array(area1means)/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
         df2.area1SN = (np.array(area1SN) * 0.0004 / (200*200*0.0004))*100
-        df.area2 = np.array(area2means)/0.94 *(1/0.917)/10
+        df.area2 = np.array(area2means)/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
         df2.area2SN = (np.array(area2SN) * 0.0004 / (200*200*0.0004))*100
-        df.area3 = np.array(area3means)/0.94 *(1/0.917)/10
+        df.area3 = np.array(area3means)/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
         df2.area3SN = (np.array(area3SN) * 0.0004 / (200*200*0.0004))*100
-        df.area4 = np.array(area4means)/0.94 *(1/0.917)/10
+        df.area4 = np.array(area4means)/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
         df2.area4SN = (np.array(area4SN) * 0.0004 / (200*200*0.0004))*100
-        df.area5 = np.array(area5means)/0.94 *(1/0.917)/10
+        df.area5 = np.array(area5means)/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
         df2.area5SN = (np.array(area5SN) * 0.0004 / (200*200*0.0004))*100
-        df.area6 = np.array(area5means)/0.94 *(1/0.917)/10
+        df.area6 = np.array(area5means)/ (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
         df2.area6SN = (np.array(area6SN) * 0.0004 / (200*200*0.0004))*100
 
         r = pd.date_range(start=df.date.min(), end=df.date.max())
@@ -631,8 +725,8 @@ def colorbar(vmin, vmax, cmap):
 
     """
 
-    vmin = vmin/0.94 *(1/0.917)/10
-    vmax = vmax/0.94 *(1/0.917)/10
+    vmin = vmin / (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
+    vmax = vmax / (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
 
     fig, ax = plt.subplots(1, 1)
 
@@ -650,10 +744,21 @@ def colorbar(vmin, vmax, cmap):
     return
 
 
+def bar_plots():
+
+
+    return
+
+
+
+
+
+
+
 # USER DEFINED VARIABLES
 year = '2019'
 var='algae'
-path = str('/home/joe/Code/BigIceSurfClassifier/RISA_OUT/')
+path = str('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/')
 dpi = 300
 vmin = 0
 vmax = 200000

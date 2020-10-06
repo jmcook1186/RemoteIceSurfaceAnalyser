@@ -48,8 +48,8 @@ def grab_params():
     algae = [0,1000,5000,10000,15000,20000,25000,50000,75000,100000,125000,150000,175000,200000,250000]
 
 
-    spectra = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv')
-    LUT = np.load('/home/joe/Code/BigIceSurfClassifier/Process_Dir/LUT_cz05.npy')
+    spectra = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/Training_Data/HCRF_master_16171819.csv')
+    LUT = np.load('/home/joe/Code/Remote_Ice_Surface_Analyser/Process_Dir/LUT_cz05.npy')
     
     densityList = []
     grainList = []
@@ -95,7 +95,7 @@ def grab_params():
 
     return
 
-def 2DBA_of_field_samples():
+def BDA2_of_field_samples():
 
 
     """
@@ -105,8 +105,8 @@ def 2DBA_of_field_samples():
 
     """
 
-    spectra = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv')
-    LUT = np.load('/home/joe/Code/BigIceSurfClassifier/Process_Dir/LUT_cz05.npy')
+    spectra = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/Training_Data/HCRF_master_16171819.csv')
+    LUT = np.load('/home/joe/Code/Remote_Ice_Surface_Analyser/Process_Dir/LUT_cz05.npy')
     LUT = LUT.reshape(2244,len(wavelengths))
     
     # reformat LUT: flatten LUT from 3D to 2D array with one column per combination
@@ -147,7 +147,7 @@ def 2DBA_of_field_samples():
 def compare_predicted_and_measured(savepath):
 
     # load metadata with predicted params
-    DF = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Spectra_Metadata.csv')
+    DF = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Spectra_Metadata.csv')
 
     # divide by surface class and select algal concentration column
     HA_alg = DF['Algae'][DF['Surf Type']=='HA']
@@ -165,25 +165,24 @@ def compare_predicted_and_measured(savepath):
     CI_grn = DF['Grain Size'][DF['Surf Type']=='CI']
     SN_grn = DF['Grain Size'][DF['Surf Type']=='SNOW']
 
-    data_alg = [HA_alg,LA_alg,CI_alg,SN_alg]
-    data_dns = [HA_dns, LA_dns, CI_dns, SN_dns]
-    data_grn = [HA_grn, LA_grn, CI_grn, SN_grn]
+    data_alg = [SN_alg,CI_alg,LA_alg,HA_alg]
+    data_dns = [SN_dns, CI_dns, LA_dns, HA_dns]
+    data_grn = [SN_grn, CI_grn, LA_grn, HA_grn]
 
-    
     fig, (ax1,ax2,ax3) = plt.subplots(3,1,figsize=(10,15))
     
     ax1.boxplot(data_alg,whis='range')
-    ax1.set_xticklabels(['HA','LA','CI','SN'])
+    ax1.set_xticklabels(['SN','CI','LA','HA'])
     ax1.set_ylabel('Predicted algal Concentration (ppb)')
     ax1.set_xlabel('Surface class from field notes')
-    
+
     ax2.boxplot(data_dns,whis='range')
-    ax2.set_xticklabels(['HA','LA','CI','SN'])
+    ax2.set_xticklabels(['SN','CI','LA','HA'])
     ax2.set_ylabel('Predicted ice density (kg m-3)')
     ax2.set_xlabel('Surface class from field notes')
 
     ax3.boxplot(data_grn,whis='range')
-    ax3.set_xticklabels(['HA','LA','CI','SN'])
+    ax3.set_xticklabels(['SN','CI','LA','HA'])
     ax3.set_ylabel('Predicted grain size (microns)')
     ax3.set_xlabel('Surface class from field notes')
 
@@ -195,13 +194,11 @@ def compare_predicted_and_measured(savepath):
 
 def compare_measured_concn_to_predicted(savepath):
 
-    DF = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Spectra_Metadata.csv')
+    DF = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Spectra_Metadata.csv')
 
-    measured_ppb = DF['cells/mL_calcd']
-    modelled_ppb = DF['Algae']
+    measured_ppb = DF['cells/mL(measured)']
+    modelled_ppb = DF['cells/mL_rom_ppb']
 
-    # grab measured cells/mL converted to ppb (predicted)
-    # and 
     modelled_ppb = modelled_ppb[measured_ppb>0]
     measured_ppb = measured_ppb[measured_ppb>0]
     
@@ -213,7 +210,7 @@ def compare_measured_concn_to_predicted(savepath):
     model = sm.OLS(measured_ppb, modelled_ppb).fit()
     summary = model.summary()
 
-    test_x = [0,10000,50000,75000,100000,125000,150000,175000,200000,250000]
+    test_x = [0,1000,5000,7500,10000,12500,15000,17500,20000,25000, 30000, 35000]
     ypred = model.predict(test_x)
 
     fig, (ax1,ax2) = plt.subplots(2,1,figsize=(10,10))
@@ -225,13 +222,13 @@ def compare_measured_concn_to_predicted(savepath):
 
     ax2.scatter(modelled_ppb,measured_ppb, marker='o',color='k')
     ax2.plot(test_x,ypred,linestyle='--')
-    ax2.set_ylabel('Algal concentration, ppb (field)')
-    ax2.set_xlabel('Algal concentration, ppb (predicted by model)')
-    ax2.text(0,350000,'r2 = {}\np = {}'.format(np.round(model.rsquared,3),np.round(model.pvalues[0],8)),fontsize=12)
+    ax2.set_ylabel('Algal concentration, cells/mL (field)')
+    ax2.set_xlabel('Algal concentration, clls/mL (predicted by model)')
+    ax2.text(0,35000,'r2 = {}\np = {}'.format(np.round(model.rsquared,3),np.round(model.pvalues[0],8)),fontsize=12)
 
     fig.tight_layout()
 
-    savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Figures_and_Tables'
+    savepath = '/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Figures_and_Tables'
     fig.savefig(str(savepath+'/measured_modelled_algae.png'),dpi=300)
 
     return
@@ -243,33 +240,23 @@ def combined_figure(savepath):
     import numpy as np
 
     # load metadata with predicted params
-    DF = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Spectra_Metadata.csv')
+    DF = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Spectra_Metadata.csv')
 
     # divide by surface class and select algal concentration column
-    HA_alg = DF['Algae'][DF['Surf Type']=='HA']
-    LA_alg = DF['Algae'][DF['Surf Type']=='LA']
-    CI_alg = DF['Algae'][DF['Surf Type']=='CI']
-    SN_alg = DF['Algae'][DF['Surf Type']=='SNOW']
-
-    HA_dns = DF['Density'][DF['Surf Type']=='HA']
-    LA_dns = DF['Density'][DF['Surf Type']=='LA']
-    CI_dns = DF['Density'][DF['Surf Type']=='CI']
-    SN_dns = DF['Density'][DF['Surf Type']=='SNOW']
-
-    HA_grn = DF['Grain Size'][DF['Surf Type']=='HA']
-    LA_grn = DF['Grain Size'][DF['Surf Type']=='LA']
-    CI_grn = DF['Grain Size'][DF['Surf Type']=='CI']
-    SN_grn = DF['Grain Size'][DF['Surf Type']=='SNOW']
+    HA_alg = DF['cells/mL_rom_ppb'][DF['Surf Type']=='HA']
+    LA_alg = DF['cells/mL_rom_ppb'][DF['Surf Type']=='LA']
+    CI_alg = DF['cells/mL_rom_ppb'][DF['Surf Type']=='CI']
+    SN_alg = DF['cells/mL_rom_ppb'][DF['Surf Type']=='SNOW']
 
     data_alg = [HA_alg,LA_alg,CI_alg,SN_alg]
     data_dns = [HA_dns, LA_dns, CI_dns, SN_dns]
     data_grn = [HA_grn, LA_grn, CI_grn, SN_grn]
 
 
-    DF2 = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Spectra_Metadata.csv')
+    DF2 = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Spectra_Metadata.csv')
 
-    measured_ppb = DF2['ppb_calc_frm_cllspermL']
-    modelled_ppb = DF2['Algae']
+    measured_ppb = DF['cells/mL(measured)']
+    modelled_ppb = DF['cells/mL_rom_ppb']
 
     # grab measured cells/mL converted to ppb (predicted)
     # and 
@@ -280,28 +267,35 @@ def combined_figure(savepath):
     model = sm.OLS(measured_ppb, modelled_ppb).fit()
     summary = model.summary()
 
-    test_x = [0,10000,50000,75000,100000,125000,150000,175000,200000,250000]
+    test_x = [0,1000,5000,7500,10000,12500,15000,17500,20000,25000, 30000]
+
     ypred = model.predict(test_x)
+
 
 
     fig, (ax1,ax2, ax3) = plt.subplots(3,1,figsize=(10,10))
 
     ax1.plot(measured_ppb,color='k',marker = 'o',linestyle = '--',label='measured')
     ax1.plot(modelled_ppb,color='r',marker = 'x',label='modelled')
-    ax1.set_ylabel('Algal concentration (ppb)')
+    ax1.set_ylim(0,50000)
+    ax1.set_ylabel('Algal concentration (cells/mL)')
     ax1.legend(loc='best')
 
     ax2.scatter(modelled_ppb,measured_ppb, marker='o',color='k')
     ax2.plot(test_x,ypred,linestyle='--')
-    ax2.set_ylabel('Algal concentration, ppb (field)')
-    ax2.set_xlabel('Algal concentration, ppb (predicted by model)')
-    ax2.text(0,350000,'r2 = {}\np = {}'.format(np.round(model.rsquared,3),np.round(model.pvalues[0],8)),fontsize=12)
+    ax2.set_ylabel('Algal concentration, cells/mL (field)')
+    ax2.set_xlabel('Algal concentration, cells/mL (predicted by model)')
+    ax2.set_ylim(0,50000)
+    ax2.text(0,30000,'r2 = {}\np = {}'.format(np.round(model.rsquared,3),np.round(model.pvalues[0],8)),fontsize=12)
+
 
     ax3.boxplot(data_alg,whis='range')
     ax3.set_xticklabels(['HA','LA','CI','SN'])
-    ax3.set_ylabel('Predicted algal Concentration (ppb)')
+    ax3.set_ylim(0,45000)
+    ax3.set_ylabel('Predicted algal Concentration (cells/mL)')
     ax3.set_xlabel('Surface class from field notes')
 
+    fig.tight_layout()
     plt.savefig(str(savepath+'FieldValidationFig.png'),dpi=300)
 
     return
@@ -337,8 +331,8 @@ def clean_ice_field_vs_DISORT_NIR():
                'fox17_8a_', 'fox17_8b_', 'fox17_9b_', 'fox24_17_']
 
 
-    spectra = pd.read_csv('/home/joe/Code/BigIceSurfClassifier/Training_Data/HCRF_master_16171819.csv')
-    LUT = np.load('/home/joe/Code/BigIceSurfClassifier/Process_Dir/LUT_clean.npy')
+    spectra = pd.read_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/Training_Data/HCRF_master_16171819.csv')
+    LUT = np.load('/home/joe/Code/Remote_Ice_Surface_Analyser/Process_Dir/LUT_cz05.npy')
     
     params = []
     # reformat LUT: flatten LUT from 3D to 2D array with one column per combination
@@ -381,15 +375,15 @@ def clean_ice_field_vs_DISORT_NIR():
     OutDF['grainsize'] = grainlist
     OutDF['min_error'] = errorlist
 
-    OutData.to_csv('/home/joe/Code/BigIceSurfClassifier/BISC_OUT/field_disort_NIR_comparison.csv')
+    OutData.to_csv('/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Figures_and_Tables/field_disort_NIR_comparison.csv')
     
     
     return
 
 
-# savepath = '/home/joe/Code/BigIceSurfClassifier/BISC_OUT/Figures_and_Tables/'
-# compare_predicted_and_measured(savepath)
-# compare_measured_concn_to_predicted(savepath)
+savepath = '/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Figures_and_Tables/'
+#compare_predicted_and_measured(savepath)
+compare_measured_concn_to_predicted(savepath)
 # combined_figure(savepath) 
 
-clean_ice_field_vs_DISORT_NIR()
+#clean_ice_field_vs_DISORT_NIR()
