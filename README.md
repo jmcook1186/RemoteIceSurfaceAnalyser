@@ -214,6 +214,27 @@ If the inverted RTM is toggled ON in the template, then the spectral reflectance
 
 Note that despite the LUT approach, the RTM inversion is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in about 7 minutes per tile. Increasing the size of the LUT increases the computation time. Currently the LUT comprises 2400 individual simulated spectra, produced by running snicar with all possible combinations of 6 grain sizes, 5 densities, 8 dust concentrations and 10 algal concentrations. 
 
+
+Note also that predictions for cell concentrations are ouput in ppb (=ng/g). To convert this to cell concentration in cells/mL, I suggest the following (used in upcoming publication):
+
+1. Calculate cell volume from empirical measurements
+
+    the mean radius and length for glacier algal cells from Cook et al. (2020) was 4um and 40 um respectively. Therefore, use pi*r^2*l to calculate cell volume
+    
+2. Calculate per-cell mass from volume and density
+
+    the cell density is taken from the literature to be 1400 kg/m3 which is
+    0.0014 ng/um3. Then multiply by  1 - water fraction to get dry mass. There is uncertainty around this value and past studies have ranged from 0.5 - 0.8. I used it as a tuning parameter bound by those literature values and found 0.7 to be optimal for reducing the error between measured and predicted concentrations. This gives dry weight per cell, which I calculate to be 0.84 ng.
+
+3. Use per-cell dry mass to calculate cells/mL from ppb
+   
+    ppb is equal to ng/g. The mass of ice per mL is 0.917g. Therefore divide the value in ppb by the reciprocal of 0.917 and multiply by a constant C that accounts for the algae being in the upper 1mm of ice whereas field measurements have a vertical resolution of 1-2cm (C=10)
+
+Therefore, to get cells/mL:
+
+cells/mL = ppb / (((((PI() * 4^2) * 40)* 0.0014)*0.3) /0.917) *10)
+
+
 ### 2DBA Band ratio index and prediction
 
 If the DISORT inversion is toggled ON, the 2DBA band ratio index and prediction is calculated by default. The 2DBA index was proposed by Wang et al (2018) for biomass quantification. It is the ratio between reflectance in Sentinel 2 bands 5 / band 4. The ratio for each pixel is saved as the 2DBA index (the layer name in the output dataset is "Index2DBA"). Wang et al. also proposed an exponential equation for converting index value into biomass concentration in cells/mL:

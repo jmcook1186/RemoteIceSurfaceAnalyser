@@ -744,13 +744,66 @@ def colorbar(vmin, vmax, cmap):
     return
 
 
-def bar_plots():
+def bar_plots(path,dpi):
 
+    fig,axes = plt.subplots(2,2,figsize=(10,5))
+
+    algMean = [4460, 3490, 3210, 5250]
+    algSTD = [3850, 2730, 2660, 4170]
+
+    grainMean = [9861, 7802, 7907, 11886]
+    grainSTD = [3431, 4428, 4458, 3298]
+
+    densMean = [495, 507, 535, 471]
+    densSTD = [82, 109, 109, 81]
+
+    albedoMean = [0.52, 0.58, 0.59, 0.47] 
+    albedoSTD = [0.12, 0.12, 0.13, 0.11]
+
+    axes[0,0].bar(x = [2016,2017,2018,2019], height = algMean, yerr = algSTD, color = 'k',alpha = 0.4)
+    axes[0,1].bar(x = [2016,2017,2018,2019], height = albedoMean, yerr = albedoSTD, color = 'g', alpha = 0.4)
+    axes[1,0].bar(x = [2016,2017,2018,2019], height = grainMean, yerr = grainSTD, color = 'b',alpha=0.4)
+    axes[1,1].bar(x = [2016,2017,2018,2019], height = densMean, yerr = densSTD, color='y', alpha=0.4)
+    
+    axes[0,0].set_ylabel('Algae concentration\n (cells/mL)')
+    axes[0,0].set_xticks([2016,2017,2018,2019])
+    axes[0,0].set_xticklabels(['2016','2017','2018','2019'])
+    axes[0,1].set_ylabel('Albedo')
+    axes[0,1].set_xticks([2016,2017,2018,2019])
+    axes[0,1].set_xticklabels(['2016','2017','2018','2019'])
+    axes[1,0].set_ylabel('$R$$_{eff}$ ($\mu$m)')
+    axes[1,0].set_xticklabels(['2016','2017','2018','2019'])
+    axes[1,0].set_xticks([2016,2017,2018,2019])    
+    axes[1,1].set_ylabel('$\\rho$$_{bi}$ (kgm$^-3$)')
+    axes[1,1].set_xticks([2016,2017,2018,2019])
+    axes[1,1].set_xticklabels(['2016','2017','2018','2019'])
+    
+
+    plt.tight_layout()
+    path = '/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Figures_and_Tables/'
+    dpi = 300
+    plt.savefig(str(path+'bar_plots.jpg'),dpi=dpi)
 
     return
 
 
+def plot_pigment_MACs(path,dpi):
 
+    old = pd.read_csv('/home/joe/Code/BioSNICAR_GO_PY/Data/phenol_MAC.csv',header=None)
+    new = pd.read_csv('/home/joe/Code/BioSNICAR_GO_PY/Data/inVivoPhenolMAC.csv',header=None)
+
+    plt.figure(figsize=(8,8))
+    plt.plot(wl,old[0:400],'b',label='original MAC')
+    plt.plot(wl,new[0:400]/1000000,'r',label='new MAC')
+    plt.xlabel('Wavelength ($\mu$m)')
+    plt.ylabel('MAC (m$^2$/mg)')
+    plt.legend(loc='best')
+
+    dpi = 300
+    path = '/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Figures_and_Tables'
+    plt.savefig(str(path+'/pigment_figure.png'),dpi = dpi)
+
+    return
 
 
 
