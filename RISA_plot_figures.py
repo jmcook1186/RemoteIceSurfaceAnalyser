@@ -780,8 +780,6 @@ def bar_plots(path,dpi):
     
 
     plt.tight_layout()
-    path = '/home/joe/Code/Remote_Ice_Surface_Analyser/RISA_OUT/Figures_and_Tables/'
-    dpi = 300
     plt.savefig(str(path+'bar_plots.jpg'),dpi=dpi)
 
     return
@@ -806,6 +804,42 @@ def plot_pigment_MACs(path,dpi):
     return
 
 
+def albedo_reducing_power():
+
+    """
+    this function simply plots the change in broadband albedo caused by
+    the addition of glacier algae to various grain sizes, leading to Fig 6C 
+    in the paper.
+
+    """
+
+    # 2) plot change in albedo vs grain size for each algal conc
+    dAlbDS = pd.read_csv(str(path+'RTM_change_in_albedo_vs_reff.csv'))
+    
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+
+    ax1.plot(dAlbDS['reff'],dAlbDS['20000'],marker = 'x',label='20000 ppb')
+    ax1.plot(dAlbDS['reff'],dAlbDS['30000'],marker = 'x',label='30000 ppb')
+    ax1.plot(dAlbDS['reff'],dAlbDS['40000'],marker = 'x',label='40000 ppb')
+    ax1.plot(dAlbDS['reff'],dAlbDS['50000'],marker = 'x',label='50000 ppb')
+    ax1.plot(dAlbDS['reff'],dAlbDS['60000'],marker = 'x',label='60000 ppb')
+    ax1.plot(dAlbDS['reff'],dAlbDS['80000'],marker = 'x',label='80000 ppb')
+    ax1.set_ylim(0.01,0.07)
+    
+    # ax1.set_xticklabels(dAlbDS['reff'])
+    ax1.set_xlabel('R$_{eff}$ $\mu$m')
+    ax1.set_ylabel('$\Delta$A (A$_{clean}$ - A$_{algal}$)')
+
+    ax1.set_xlim(400,10000)
+    plt.legend(bbox_to_anchor=(0.95,0.99),ncol=3)
+    plt.tight_layout()
+
+    plt.savefig(str(path+'RTM_Experiment.jpg'),dpi=300)
+
+
+
+    return
 
 
 # USER DEFINED VARIABLES
