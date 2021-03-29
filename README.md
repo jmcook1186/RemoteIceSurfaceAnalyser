@@ -206,16 +206,12 @@ Surface albedo is calculated using Liang et al's (2000) narrowband to broadband 
 
 ### RTM retrievals
 
-There is an option in the template file to retrieve ice surface parameters using an inverted radiative transfer model (BioDISORT which uses a Python interface modelled after BioSNICAR_GO from Cook et al. 2020: https://doi.org/10.5194/tc-14-309-2020) to run the radiatve transfer model DISORT. 
-
-BioDISORTpy can be found in a separate repository here: www.github.com/jmcook1186/bioDISORTpy. This was used to construct the LUTs that are found here and used in the inverted RTM.
-
-If the inverted RTM is toggled ON in the template, then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of 2244 BioDISORT-generated spectra. There are multiple LUTs generated using different solar zenith angles. The appropriate LUT is selected by comparison to the solar zenith angle at the time of aquisition for the S2 image calculated from the site coordinates, date and time from the image metadata. The DISORT parameters (grain size, density, algae concentration) used to generate the closest-matching spectra (measured as absolute error) are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. Dust is not quantified because a) previous research indicates that it is insignificant as a driver of surface albedo, b) initial tests indicated that dust was taking effectively random values rather than being a significant controlling variable for the spectral albedo.
+There is an option in the template file to retrieve ice surface parameters using an inverted radiative transfer model. The RTM of choice is BioSNICAR (www.github.com/jmcook1186/BioSNICAR_GO_PY/) run using the adding-doublng solver. If the inverted RTM is toggled ON in the template, then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of simulated spectra. The appropriate zenith angle is selected using the time of aquisition for the S2 image and the site coordinates, date and time from the image metadata. The RTM parameters (WC thickness, grain size, density, algae concentration) used to generate the closest-matching spectra (measured as mean absolute error) are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. Dust is not quantified because a) previous research indicates that it is insignificant as a driver of surface albedo, b) initial tests indicated that dust was taking effectively random values rather than being a significant controlling variable for the spectral albedo.
 
 Note that despite the LUT approach, the RTM inversion is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in about 7 minutes per tile. Increasing the size of the LUT increases the computation time. Currently the LUT comprises 2400 individual simulated spectra, produced by running snicar with all possible combinations of 6 grain sizes, 5 densities, 8 dust concentrations and 10 algal concentrations. 
 
 
-Note also that predictions for cell concentrations are ouput in ppb (=ng/g). To convert this to cell concentration in cells/mL, I suggest the following (used in upcoming publication):
+Note also that predictions for cell concentrations are ouput in cells/mL. The conversion from ppb to cells/mL is as follows:
 
 1. Calculate cell volume from empirical measurements
 
@@ -228,20 +224,16 @@ Note also that predictions for cell concentrations are ouput in ppb (=ng/g). To 
 
 3. Use per-cell dry mass to calculate cells/mL from ppb
    
-    ppb is equal to ng/g. The mass of ice per mL is 0.917g. Therefore divide the value in ppb by the reciprocal of 0.917 and multiply by a constant C that accounts for the algae being in the upper 1mm of ice whereas field measurements have a vertical resolution of 1-2cm (C=10)
+    ppb is equal to ng/g. The mass of ice per mL is 0.917g. Therefore divide the value in ppb by the reciprocal of 0.917
 
 Therefore, to get cells/mL:
 
-cells/mL = ppb / (((((PI() * 4^2) * 40)* 0.0014)*0.3) /0.917) *10)
+cells/mL = ppb / (((((PI() * 4^2) * 40)* 0.0014)*0.3) /0.917)
 
 
 ### 2DBA Band ratio index and prediction
 
-If the DISORT inversion is toggled ON, the 2DBA band ratio index and prediction is calculated by default. The 2DBA index was proposed by Wang et al (2018) for biomass quantification. It is the ratio between reflectance in Sentinel 2 bands 5 / band 4. The ratio for each pixel is saved as the 2DBA index (the layer name in the output dataset is "Index2DBA"). Wang et al. also proposed an exponential equation for converting index value into biomass concentration in cells/mL:
-
-cells/mL = 10^-35 * 2DBAIndex exp^(87.015*2DBAIndex)
-
-This is applied piwelwise and the predicted biomass concentration in cells/mL according to the Wang et al. (2018) method is saved as a separate layer in the output dataset, named "predict2DBA". This enables direct comparison between the biomass quantification estimated using the band ratio technique and the biomass quantification estimated using the inverse RTM.
+If the SNICAR inversion is toggled ON, the 2DBA band ratio index and prediction is calculated by default. The 2DBA index was proposed by Wang et al (2018) for biomass quantification. It is the ratio between reflectance in Sentinel 2 bands 5 / band 4. A conversion from index value to cell concentration is also applied.
 
 
 ### Missing pixel interpolation

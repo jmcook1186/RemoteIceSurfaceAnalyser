@@ -48,6 +48,11 @@ import gc
 ######## DEFINE BLOB ACCESS, GLOBAL VARIABLES AND SET UP EMPTY LISTS/ARRAYS #######
 ###################################################################################
 
+download_problem_list = []  # empty list to append details of skipped tiles due to missing info
+QC_reject_list = []  # empty list to append details of skipped tiles due to cloud cover
+good_tile_list = []  # empty list to append tiles used in analysis
+dates = []
+
 # Get project configuration
 config = configparser.ConfigParser()
 config.read_file(open(sys.argv[1]))
@@ -61,19 +66,12 @@ azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
 # Open classifier
 isa = Ice_Surface_Analyser.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
 
-# set up empty lists and dataframes to append to
-download_problem_list = []  # empty list to append details of skipped tiles due to missing info
-QC_reject_list = []  # empty list to append details of skipped tiles due to cloud cover
-good_tile_list = []  # empty list to append tiles used in analysis
-masterDF = pd.DataFrame()
-dates = []
-
 # send config data to log file and report to console
 print("WRITING PARAMS TO LOG FILE\n")
 text_file = open("BISC_Param_Log.txt", "w")
 text_file.write("PARAMS FOR BIG ICE SURF CLASSIFIER\n\n")
 text_file.write("DATE/TIME (yyyy,mm,dd,hh,mm,ss) = {}\n".format(dt.datetime.now()))
-text_file.write("DISORT CONFIG = {}\n".format(config.get('options','retrieve_disort_params')))
+text_file.write("SNICAR CONFIG = {}\n".format(config.get('options','retrieve_snicar_params')))
 text_file.write("INTERPOLATION CONFIG = {}\n".format(config.get('options','interpolate_missing_tiles')))
 text_file.write("ENERGY_BALANCE CONFIG = {}\n".format(config.get('options','calculate_melt')))
 text_file.write("Thresholds: Cloud cover= {}, \nIce Area = {}\n".format(config.get('thresholds',
@@ -84,7 +82,7 @@ text_file.write("MONTHS: {}\n".format(config.get('options','months')))
 text_file.close()
 
 print("RUNNING WITH THE FOLLOWING CONFIGURATION:")
-print("DISORT CONFIG = ", config.get('options','retrieve_disort_params'))
+print("SNICAR CONFIG = ", config.get('options','retrieve_snicar_params'))
 print("FIGURE CONFIG = ", config.get('options','savefigs'))
 print("INTERPOLATION CONFIG = ", config.get('options','interpolate_missing_tiles'))
 print("ENERGY BALANCE CONFIG = ", config.get('options','interpolate_missing_tiles'))
@@ -92,10 +90,10 @@ print("TILES: ", config.get('options','tiles'), " YEARS: ", config.get('options'
 print("Thresholds: Cloud cover= ", config.get('thresholds','cloudCoverThresh'), " Ice Area = ", config.get('thresholds','minArea'))
 print()
 
+
 ###################################################################################
 ######################### SET TILE AND DATE RANGE #################################
 ###################################################################################
-
 
 years = json.loads(config.get('options', 'years'))
 months = json.loads(config.get('options', 'months'))
@@ -111,7 +109,6 @@ for year in years:
 
         for date in dates_pd:
             dates.append(date.strftime('%Y%m%d'))
-
 
 ###################################################################################
 ############### RUN FUNCTIONS & HEALTHCHECKS ######################################
@@ -142,7 +139,8 @@ for tile in tiles:
         print("\n DOWNLOADING FILES: {} {}\n".format(tile,date))
 
         #query blob for files in tile and date range
-        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,date, os.environ['PROCESS_DIR'])
+        filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
+                                                                      date, os.environ['PROCESS_DIR'])
 
         # check download and only proceed if correct no. of files and cloud layer present
 
@@ -172,8 +170,11 @@ for tile in tiles:
                 QC_reject_list.append('{}_{}_useable_area = {}'.format(tile,date,np.round(useable_area,2)))
 
 
-
-            else:
+            #############################################
+            ## IF HEALTHCHECKS OK, PROCEED WITH ANALYSIS
+            #############################################
+            else: # i.e. condition = healthcheck passed
+                
                 print("\n NO FLAGS, proceeding with image analysis for {}, {}".format(tile,date))
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, np.round(useable_area,2)))
 
@@ -187,21 +188,20 @@ for tile in tiles:
                 albedo = isa.calculate_albedo(s2xr)
                 Index2DBA, predict2DBA = isa.calculate_2DBA(s2xr)
                 mask2 = isa.combine_masks(s2xr)
-                
+
                 # 1) Retrieve projection info from S2 datafile and add to netcdf
                 proj_info = xr_cf_conventions.create_grid_mapping(s2xr.Data.attrs['crs'])
 
                 # 2) Create associated lat/lon coordinates DataArrays using georaster (imports geo metadata without loading img)
                 # see georaster docs at https:/media.readthedocs.org/pdf/georaster/latest/georaster.pdf
                 # find B02 jp2 file
-                fileB2 = glob.glob(str(os.environ['PROCESS_DIR'] + '*{}*B02_20m.jp2').format(tile.upper()))
+                fileB2 = glob.glob(str(os.environ['PROCESS_DIR'] + "*{}*".format(tile.upper()) + '*B02_20m.jp2'))
                 fileB2 = fileB2[0]
 
                 lon, lat = xr_cf_conventions.create_latlon_da(fileB2, 'x', 'y',
                                                               s2xr.x, s2xr.y, proj_info)
 
                 # 3) add predicted map array and add metadata
-
                 predicted = predicted.fillna(0)
                 predicted = predicted.where(mask2 > 0)
                 predicted.encoding = {'dtype': 'int16', 'zlib': True, '_FillValue': -9999}
@@ -239,88 +239,81 @@ for tile in tiles:
                 predict2DBA.attrs['units'] = 'dimensionless'
                 predict2DBA.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
-                ## RUN DISORT INVERSION
+                ## RUN SNICAR INVERSION
                 #######################
 
-                if config.get('options','retrieve_disort_params')=='True':
+                if config.get('options','retrieve_snicar_params')=='True':
 
-                    print("\n NOW RUNNING DISORT INVERSION FUNCTION \n")
+                    print("\n NOW RUNNING SNICAR INVERSION FUNCTION \n")
                     
-                    # run disort inversion
+                    # run snicar inversion
+                    # set wavelength range from start, stop, step defined in config
+                    wlmin = config.get('options', 'wlmin'); wlmax = config.get('options', 'resolution'); 
+                    wlstep = config.get('options', 'resolution')
+                    wavelengths = np.arange(wlmin,wlmax,wlstep)
+                    idx = config.get('options', 'idx') # get S2 indexes from config
 
-                    densities = [[400,400,400,400,400],[450,450,450,450,450],[500,500,500,500,500],\
-                        [550,550,550,550,550],[600,600,600,600,600],[650,650,650,650,650],\
-                            [700,700,700,700,700],[750,750,750,750,750],[800,800,800,800,800],\
-                                [850,850,850,850,850],[900,900,900,900,900]]
+                    # call snicar inversion from isa file
+                    isa.invert_snicar_multi_LUT(s2xr, mask2, predicted, predict2DBA, wavelengths, idx, tile, year, month)
 
-                    side_lengths = [[500,500,500,500,500],[700,700,700,700,700],[900,900,900,900,900],[1100,1100,1100,1100,1100],
-                    [1300,1300,1300,1300,1300],[1500,1500,1500,1500,1500],[2000,2000,2000,2000,2000],[3000,3000,3000,3000,3000],
-                    [5000,5000,5000,5000,5000],[8000,8000,8000,8000,8000],[10000,10000,10000,10000,10000],
-                    [15000,15000,15000,15000,15000]]
+                    # Add metadata to retrieved snicar parameter arrays + mask
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'density.nc')) as dens:
 
-                    algae = [[0,0,0,0,0], [1000,0,0,0,0], [5000,0,0,0,0], [10000,0,0,0,0], [50000,0,0,0,0], [10000,0,0,0,0],\
-                        [15000,0,0,0,0], [20000,0,0,0,0], [250000,0,0,0,0], [50000,0,0,0,0], [75000,0,0,0,0], [100000,0,0,0,0],\
-                            [125000,0,0,0,0], [150000,0,0,0,0], [1750000,0,0,0,0], [200000,0,0,0,0], [250000,0,0,0,0]]
-
-                    wavelengths = np.arange(0.3,5,0.01)
-
-                    idx = [19, 26, 36, 40, 44, 48, 56, 131, 190]
-
-                    isa.invert_disort(s2xr,mask2,predicted,side_lengths,densities,algae,wavelengths,idx, tile, year, month)
-
-                    # Add metadata to retrieved disort parameter arrays + mask
-                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'side_lengths.nc')) as side_length:
-
-                        side_length.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
-                        side_length.name = "Grain size"
-                        side_length.attrs['long_name'] = 'Grain size in microns. Assumed homogenous to 10 cm depth'
-                        side_length.attrs['units'] = 'Microns'
-                        side_length.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+                        dens.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        dens.name = "density"
+                        dens.attrs['long_name'] = 'density of surface'
+                        dens.attrs['units'] = 'kg m-3'
+                        dens.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
                     
-                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'densities.nc')) as density:
 
-                        density.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
-                        density.name = "Density"
-                        density.attrs['long_name'] = 'Ice column density in kg m-3. Assumed to be homogenous to 10 cm depth'
-                        density.attrs['units'] = 'Kg m-3'
-                        density.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'dz.nc')) as dz:
+
+                        dens.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        dens.name = "dz"
+                        dens.attrs['long_name'] = 'thickness of unsaturated WC'
+                        dens.attrs['units'] = 'meters'
+                        dens.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'algae.nc')) as algae:
 
                         algae.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
                         algae.name = "Algae"
-                        algae.attrs['long_name'] = 'Ice column algae in kg m-3. Assumed to be homogenous to 10 cm depth'
-                        algae.attrs['units'] = 'Kg m-3'
+                        algae.attrs['long_name'] = 'Ice column algae in ppb.'
+                        algae.attrs['units'] = 'ppb'
                         algae.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
 
+                    with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'reff.nc')) as grain:
+
+                        grain.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
+                        grain.name = "grain radius"
+                        grain.attrs['long_name'] = 'grain effective radius at surface.'
+                        grain.attrs['units'] = 'micron'
+                        grain.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
+
                     # collate data arrays into a dataset
                     dataset = xr.Dataset({
                         'classified': (['x', 'y'], predicted),
                         'albedo': (['x', 'y'], albedo),
-                        'Index2DBA':(['x','y'],Index2DBA),
-                        'predict2DBA': (['x','y'],predict2DBA),
-                        'grain_size': (['x','y'],side_length),
-                        'density':(['x','y'],density),
+                        'density': (['x','y'], dens),
+                        'dz':(['x','y'],dz),
+                        'reff':(['x','y'], grain),
                         'algae':(['x','y'],algae),
-                        'Icemask': (['x', 'y'], s2xr.Icemask),
-                        'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
-                        'FinalMask': (['x', 'y'], mask2),
+                        'predict2DBA':(['x','y'],predict2DBA),
+
                         proj_info.attrs['grid_mapping_name']: proj_info,
                         'longitude': (['x', 'y'], lon),
                         'latitude': (['x', 'y'], lat)
                     },
                         coords={'x': s2xr.x, 'y': s2xr.y})
 
-                    dataset['algae'] = dataset['algae'].where(dataset.classified>=4)
+                    dataset['algae'] = dataset['algae'].where(dataset.classified>3)
 
                 else:
-                    # if disort retrieval is not selected in config/template file
+                    # if snicar retrieval is not selected in config/template file
                     # collate data arrays into a dataset
                     dataset = xr.Dataset({
                         'classified': (['x', 'y'], predicted),
                         'albedo': (['x', 'y'], albedo),
-                        'Index2DBA':(['x','y'],Index2DBA),
-                        'predict2DBA': (['x','y'],predict2DBA),
                         'Icemask': (['x', 'y'], s2xr.Icemask),
                         'Cloudmask': (['x', 'y'], s2xr.Cloudmask),
                         'FinalMask': (['x', 'y'], mask2),
@@ -329,48 +322,38 @@ for tile in tiles:
                         'latitude': (['x', 'y'], lat)
                     },
                         coords={'x': s2xr.x, 'y': s2xr.y})
-
-                if config.get('options','interpolate_cloud')=='True':
-                    dataset = sentinel2_tools.cloud_interpolator(dataset)
 
                 # add geo info
                 dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y',
                                                          config.get('netcdf', 'author'),
                                                          config.get('netcdf', 'title'))
 
-                # if toggles, interpolate over missing values due to cloud cover
-                if config.get('options','interpolate_cloud')=='True':
-                    dataset = sentinel2_tools.cloud_interpolator(dataset)
 
+                # save netCDF to file
                 dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w', format='NETCDF4_CLASSIC')
                 
-                # flush dataset from disk
+                # flush disk and expicit garbage collection
                 dataset = None
                 predicted = None
                 albedo = None
-                density = None
                 algae = None
-
-                # explicitly call garbage collector to deallocate memory
-                print("GARBAGE COLLECTION\n")
+                grain = None
+                dz = None
+                dens = None
                 gc.collect()
                         
-        # clear process directory 
+        # clear process directory of raw S2 files 
         sentinel2_tools.clear_img_directory(os.environ['PROCESS_DIR'])
 
-    # interpolate missing tiles if toggled ON
-    if config.get('options','interpolate_missing_tiles')=='True':
-        print("\nINTERPOLATING MISSING TILES")
-        sentinel2_tools.imageinterpolator(years,months,tile,proj_info)
-
+    # colate data into single netCDF and save to disk using function in sentinel2_tools.py
     dateList = sentinel2_tools.create_outData(tile,year,month,savepath)
-    sentinel2_tools.createSummaryData(tile,year,month,savepath,dateList)
 
     # save logs to csv files
     print("\n SAVING QC LOGS TO TXT FILES")
     np.savetxt(str(savepath + "/aborted_downloads_{}_{}_{}.csv".format(tile,year,months)), download_problem_list, delimiter=",", fmt='%s')
     np.savetxt(str(savepath + "/rejected_by_qc_{}_{}_{}.csv".format(tile,year,months)), QC_reject_list, delimiter=",", fmt='%s')
     np.savetxt(str(savepath + "/good_tiles_{}_{}_{}.csv".format(tile,year,months)), good_tile_list, delimiter=",", fmt='%s')
+
 
 print()
 print("\nCOMPLETED RUN")

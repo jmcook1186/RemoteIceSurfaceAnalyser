@@ -18,6 +18,7 @@ import configparser
 import pandas as pd
 from scipy import interpolate
 import sentinel2_azure
+import gc
 plt.ioff()
 
 # Get project configuration
@@ -293,6 +294,9 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
 
 def imageinterpolator(years, months, tile, proj_info):
     """
+
+    ** NOT CURRENTLY USED **
+
     Function identifies the missing dates in the image repository - i.e those days where S2 images are not availabe due to
     cloud cover, insufficient ice coverage, a download problem or simply lack of S2 overpass. For each missing date, this
     function finds the closest previous and closest future images stored in the repository and applies a linear inteprolation
@@ -335,7 +339,7 @@ def imageinterpolator(years, months, tile, proj_info):
     for i in np.arange(0, len(DateList), 1):
 
         if config.get('options','vm')=='True':
-            DateList[i] = DateList[i][65:-34]
+            DateList[i] = DateList[i][66:-33]
             DateList[i] = str(DateList[i][0:4] + '_' + DateList[i][4:6] + '_' + DateList[i][
                                                                             6:8])  # format string to match format defined above
             DOYlist.append(dt.datetime.strptime(DateList[i], fmt).timetuple().tm_yday) # list of DOYs
@@ -363,7 +367,6 @@ def imageinterpolator(years, months, tile, proj_info):
         closestPast = DOYlist[np.where(temp < 0, temp, -9999).argmax()]  # find the closest image from the past
         closestFuture = DOYlist[np.where(temp > 0, temp, 9999).argmin()]  # find the closest image in the future
 
-
         closestPastString = dt.datetime.strptime(str(year[2:4] + str(closestPast)),
                                                  '%y%j').date().strftime('%Y%m%d')  # convert to string format
         closestFutureString = dt.datetime.strptime(str(year[2:4] + str(closestFuture)),
@@ -386,30 +389,35 @@ def imageinterpolator(years, months, tile, proj_info):
             imageFuture = xr.open_dataset(str(
                 os.environ['PROCESS_DIR']+'/outputs/' + tile + '/' + tile + '_' + closestFutureString + '_Classification_and_Albedo_Data.nc'))
 
-            # conditionally include or exclude grain size, density and algae 
-            if config.get('options','retrieve_disort_params')=='True':
+            # conditionally include or exclude density and algae 
+            if config.get('options','retrieve_snicar_params')=='True':
 
                 # extract the past and future albedo and classified layers.
                 albPast = imagePast.albedo.values
                 albFuture = imageFuture.albedo.values
                 classPast = imagePast.classified.values
                 classFuture = imageFuture.classified.values
-                grainPast = imagePast.grain_size.values
-                grainFuture = imageFuture.grain_size.values
-                densityPast = imagePast.density.values
-                densityFuture = imageFuture.density.values
+                densPast = imagePast.density.values
+                densFuture = imageFuture.density.values
+                dzPast = imagePast.dz.values
+                dzFuture = imageFuture.dz.values
+                grainPast = imagePast.reff.values
+                grainFuture = imageFuture.reff.values
                 algaePast = imagePast.algae.values
                 algaeFuture = imageFuture.algae.values
+                DBAPast = imagePast.predict2DBA.values
+                DBAFuture = imageFuture.predict2DBA.values
 
                 # create mask
                 maskPast = np.isnan(albPast)
                 maskFuture = np.isnan(albFuture)
                 combinedMask = np.ma.mask_or(maskPast, maskFuture)
 
-                filenames = ['albedo','class','grain', 'density', 'algae']
+                filenames = ['albedo','class','density','dz','reff','algae','DBA']
                 counter = 0
+                
                 # loop through params calculating linear regression
-                for i,j in [(albPast,albFuture),(classPast,classFuture),(grainPast,grainFuture),(densityPast,densityFuture),(algaePast,algaeFuture)]:                 
+                for i,j in [(albPast,albFuture),(classPast,classFuture),(densPast,densFuture),(dzPast,dzFuture),(grainPast,grainFuture),(algaePast,algaeFuture),(DBAPast,DBAFuture)]:                 
 
                     if counter == 1: # different function required for classification as it is not a continuous scale
                         
@@ -419,8 +427,7 @@ def imageinterpolator(years, months, tile, proj_info):
                         albedoDiffs = albedoDiffs*0.5
                         albedoDiffsPredicted = albPast - newImage
 
-                        newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, 
-                        classFuture, classPast)
+                        newClassImage = np.where(albedoDiffsPredicted > albedoDiffs, classFuture, classPast)
 
                         newClassImage = np.ma.array(newClassImage, mask=combinedMask)
                         newClassImage = newClassImage.filled(np.nan)
@@ -451,31 +458,34 @@ def imageinterpolator(years, months, tile, proj_info):
                         newImagexr = xr.DataArray(newImage)
                         newImagexr.to_netcdf(str(os.environ['PROCESS_DIR']+'interpolated_{}.nc'.format(filenames[counter])), mode='w')
                         newImagexr = None
+
                         counter +=1                   
 
                 with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_albedo.nc')) as albedo:
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_class.nc')) as surfclass:
-                        with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_grain.nc')) as grain:
-                            with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc')) as density:
-                                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc')) as algae:
-                                        
-                                    # collate data into xarray dataset and copy metadata from PAST
-                                    newXR = xr.Dataset({
-                                        'classified': (['x', 'y'], surfclass.values),
-                                        'albedo': (['x', 'y'], albedo.values),
-                                        'grain_size': (['x', 'y'], grain.values),
-                                        'density': (['x', 'y'], density.values),
-                                        'algae': (['x', 'y'], algae.values),
-                                        'Icemask': (['x', 'y'], imagePast.Icemask),
-                                        'Cloudmask': (['x', 'y'], imagePast.Cloudmask),
-                                        'FinalMask': (['x', 'y'], combinedMask),
-                                        proj_info.attrs['grid_mapping_name']: proj_info,
-                                        'longitude': (['x', 'y'], imagePast.longitude),
-                                        'latitude': (['x', 'y'], imagePast.latitude)
-                                    }, coords = {'x': imagePast.x, 'y': imagePast.y})
+                        with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_density.nc')) as density:
+                            with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_dz.nc')) as dz:
+                                with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_reff.nc')) as grain:
+                                    with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_algae.nc')) as algae:
+                                        with xr.open_dataarray(str(os.environ['PROCESS_DIR']+'interpolated_DBA.nc')) as DBA2:
+                                            
+                                            # collate data into xarray dataset and copy metadata from PAST
+                                            newXR = xr.Dataset({
+                                                'classified': (['x', 'y'], surfclass.values),
+                                                'albedo': (['x', 'y'], albedo.values),
+                                                'density':(['x','y'],density.values),
+                                                'dz':(['x','y'], dz.values),
+                                                'reff':(['x','y'], grain.values),
+                                                'algae': (['x', 'y'], algae.values),
+                                                'predict2DBA':(['x','y'],DBA2.values),
+                                                'FinalMask': (['x', 'y'], combinedMask),
+                                                proj_info.attrs['grid_mapping_name']: proj_info,
+                                                'longitude': (['x', 'y'], imagePast.longitude),
+                                                'latitude': (['x', 'y'], imagePast.latitude)
+                                            }, coords = {'x': imagePast.x, 'y': imagePast.y})
 
 
-            else: # if disort retrieval toggled off
+            else: # if snicar retrieval toggled off
 
                 # extract the past and future albedo and classified layers.
                 albPast = imagePast.albedo.values
@@ -552,20 +562,26 @@ def imageinterpolator(years, months, tile, proj_info):
                 albedo = None
                 surfClass = None
 
-                files = glob.glob(str(os.environ['PROCESS_DIR'] + 'interpolated_' + '*.nc'))
-                for f in files:
-                    os.remove(f)
+            files = glob.glob(str(os.environ['PROCESS_DIR'] + 'interpolated_' + '*.nc'))
+            
+            for f in files:
+                os.remove(f)
 
             # save synthetic image in same format in sub directory as original "good" images
             newXR.to_netcdf(str(os.environ["PROCESS_DIR"] + "/outputs/" + tile + "/{}_{}_Classification_and_Albedo_Data.nc".format(tile, MissingDateString)), mode='w')
             print("Interpolated dataset saved locally")
             newXR = None
+            gc.collect()
 
     return
 
 
 def create_outData(tile,year,month,savepath):
+    
+    """
+    creates single NetCDF output and saves to disk
 
+    """
     outPath = str(savepath)
     dateList = []
 
@@ -586,162 +602,16 @@ def create_outData(tile,year,month,savepath):
     ds = xr.open_mfdataset(file_list,concat_dim='date',chunks={'x': 2000, 'y': 2000})
     ds = ds.assign_coords(date=dateList)
 
-    ds.to_netcdf(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
+    ds.to_netcdf(str(outPath+'/FULL_OUTPUT_{}_{}_Final.nc'.format(tile,year)))
+    
+    print('\nDATASET SAVED')
     ds = None
+    gc.collect()
 
     ### HERE DELETE INDIVIDUAL FILES
+    file_list = glob.glob(outPath+'*Albedo_Data.nc')
+
     for f in file_list:
         os.remove(f)
 
     return dateList
-
-
-def createSummaryData(tile,year,month, savepath,dateList, upload_to_blob = False):
-
-    outPath = savepath
-
-    ds = xr.open_dataset(str(outPath+'/FULL_OUTPUT_{}_{}.nc'.format(tile,year)))
-    
-    # DEFINE SIZE OF OUT ARRAYS
-    if config.get('options','retrieve_disort_params')=='True':
-        out = np.zeros(shape=(8,len(ds.date)))
-        outClass = np.zeros(shape=(9,len(ds.date),7))
-
-    else:
-        out = np.zeros(shape=(2,len(ds.date)))
-        outClass = np.zeros(shape=(3,len(ds.date),7))
-
-
-    # START SUMMARIZING DATA AND APPENDING RESULTS TO OUT ARRAYS 
-    if config.get('options','retrieve_disort_params')=='True': 
-        
-        for i in range(len(ds.date)):
-
-            date_i = dateList[i]
-            # scalar outputs
-            out[0,i] = ds.albedo.sel(date=date_i).mean().values  # mean albedo across whole tile
-            out[1,i] = ds.albedo.sel(date=date_i).std().values # std albedo across whole tile
-            out[2,i] = ds.grain_size.sel(date=date_i).mean().values # mean grain size
-            out[3,i] = ds.grain_size.sel(date=date_i).std().values # std grain size
-            out[4,i] = ds.density.sel(date=date_i).mean().values # mean density
-            out[5,i] = ds.density.sel(date=date_i).std().values # std density
-            out[6,i] = ds.algae.sel(date=date_i).mean().values # mean algae
-            out[7,i] = ds.algae.sel(date=date_i).std().values # mean algae
-            
-            # outputs by class
-            for j in range(7):
-
-                outClass[0,i,j] = len(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # count instances of each class
-                outClass[1,i,j] = np.mean(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
-                outClass[2,i,j] = np.std(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
-                outClass[3,i,j] = np.mean(ds.grain_size.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of grain size in each class
-                outClass[4,i,j] = np.std(ds.grain_size.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of grain size in each class
-                outClass[5,i,j] = np.mean(ds.density.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of density in each class
-                outClass[6,i,j] = np.std(ds.density.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of density in each class
-                outClass[7,i,j] = np.mean(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of algae in each class
-                outClass[8,i,j] = np.std(ds.algae.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of algae in each class
-        
-        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STDAlbedo','meanGrain','STDGrain','meanDensity','STDDensity','meanAlgae','STDAlgae'],'date':dateList})
-        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD','GrainMean','GrainSTD','DensityMean','DensitySTD','AlgaeMean','AlgaeSTD'], 'date':dateList,\
-            'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
-
-        outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
-        outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
-
-    else:
-        
-        for i in range(len(ds.date)):
-            
-            date_i = dateList[i]
-            # scalar outputs
-            out[0,i] = ds.albedo.sel(date=date_i).mean(skipna=True).values  # mean albedo across whole tile
-            out[1,i] = ds.albedo.sel(date=date_i).std(skipna = True).values # std albedo across whole tile
-
-            # outputs by class
-            for j in range(7):
-
-                outClass[0,i,j] = len(ds.classified.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # count instances of each class
-                outClass[1,i,j] = np.mean(ds.albedo.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # mean of albedo in each class
-                outClass[2,i,j] = np.std(ds.albedo.sel(date=date_i).values[ds.classified.sel(date=date_i).values==j]) # std of albedo in each class
-
-        outTileXR = xr.DataArray(out,dims=('var','date'),coords={'var':['meanAlbedo','STD Albedo'],'date':dateList})
-        outClassXR = xr.DataArray(outClass,dims=('var','date','classID'),coords={'var': ['ClassCount','AlbedoMean','AlbedoSTD'], 'date':dateList,
-        'classID':['NONE','SN', 'WAT', 'CC', 'CI', 'LA', 'HA']})
-
-        outTileXR.to_netcdf(savepath + 'OutData_{}_{}.nc'.format(tile,year))
-        outClassXR.to_netcdf(savepath + 'OutData_{}_{}_byClass.nc'.format(tile,year))
-
-    # if toggled, remove individual files from /outputs leaving only the concatenated multi-date file
-    if config.get('options','remove_individual_files')=='True':
-
-        file_list = glob.glob(outPath+'*Albedo_Data.nc')
-
-        for file in file_list:
-            os.remove(file)
-
-
-    if config.get('options','upload_to_blob')=='True':
-
-        # send dataset to azure blob storage and delete from local storage
-        azure_cred = configparser.ConfigParser()
-        azure_cred.read_file(open(os.environ['AZURE_SECRET']))
-        azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
-                                        azure_cred.get('account', 'key'))
-        azure.dataset_to_blob(str(os.environ['PROCESS_DIR']+'outputs/'+ tile + '/'), delete_local_nc=True)
-
-    return
-
-
-def cloud_interpolator(dataset):
-    
-    """
-    
-    In this cloud interpolator, the missing values are simply filled with the median value for that layer
-
-    """
-
-    # define list of layers depending upon whether disort
-    if config.get('options','retrieve_disort_params')=='True':
-
-        layers = [dataset.classified, dataset.albedo, dataset.grain_size, dataset.density, dataset.algae]
-    
-    else:
-    
-        layers = [dataset.classified, dataset.albedo]
-    
-    # define mask
-    mask = dataset.FinalMask
-
-    # loop through layers
-    for i in range(len(layers)):
-
-        layer = layers[i]
-        layer_median = layer.median().values # calculate median value
-        layer =layer.where(layer>=0,layer_median) # replace nanswith median
-
-        if i == 0:
-            dataset.classified.values = layer
-            layer = None
-
-        elif i == 1:
-            dataset.albedo.values = layer
-            layer = None
-
-        elif i == 2:
-            dataset.grain_size.values = layer
-            layer = None
-
-        elif i == 3:
-            dataset.density.values = layer
-            layer = None
-        
-        elif i == 4:
-            dataset.algae.values = layer
-            layer = None
-
-        else:
-            print ("ERROR IN PIXELWISE CLOUD INTERPOLATION: counter out of range")
-
-    dataset = dataset.where(mask > 0)
-
-    return dataset
