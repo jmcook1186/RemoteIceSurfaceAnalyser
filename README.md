@@ -1,33 +1,31 @@
 # RISA: Remote Ice Surface Analyser
 
-This repository contains code for automated downloading, processing, analysis and visualizing of Sentinel-2 data for the Greenland Dark Zone. For a user-defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction, and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve ice grain size, density and light absorbing impurity concentrations, and calculate the surface albedo. Additional scripts are provided for generating summary statistics and plotting maps for each parameter.
+This repository contains code for automated downloading, processing and analysis of Sentinel-2 data for the Greenland Dark Zone. For a user-defined tile and date range, the script will download the imagery, reproject and apply an atmospheric correction (using the ESA Sen2Cor processor), and then for each pixel predict a discrete surface type using a random forest classifier trained on field spectroscopy data, invert a radiative transfer model to retrieve weatherign crust thickness, density and glacier algae concentrations, and calculate the surface albedo using a naoorwband to broadband conversion. Additional scripts are provided for generating summary statistics and plotting maps for each parameter.
 
 This code is controlled using a .template file that is pre-configured for the south-west Greenland Ice Sheet between 65-70N. This area is contained within the following five tiles:
 
 22WEA, 22WEB, 22WEC, 22WET, 22WEU, 22WEV
 
-Imagery is downloaded from a MS Azure blob container populated with Sentinel-2 level-2A products for Jun-August 2016-2019. To extend this to more recent dates the code must either be linked to a different image repository or the image downloading and processing scripts provided here used to add more imagery to the existing blob container.
+The initila downloading and pre-processing of Sentinel-2 imagery only needs to be completed once as the processed L2A imagery is now stored in an Azure blob container and is downloaded according to the required tile/date and processed from there. Currently, June, July and August images for 2016-2019 are available in the blob store. To extend this to more recent dates the code must either be linked to a different image repository or the image downloading and processing scripts provided here used to add more imagery to the existing blob container.
 
 ## Model Overview
 
-![Model Schematic](RISA_OUT/Figures_and_Tables/RISA_schematic.png)
+![Model Schematic](/RISA_schematic.png)
 
-The schematic above shows the main flows between mdel components. Rectangles with white backgrounds are scripts that do some data processing or transformation. Rectangles with light grey backgrounds are input data. Rectangles with orange backgrounds are intermediate data products. Retangles with red backgrounds are model outputs. Arrows indicate flow of data from one component to the next. I have tried to loosely colour code to make it easier to follow and isolate sub-loops within the main model structure.
-
-## Setup
+The schematic above shows the main flows between model components. Rectangles with white backgrounds are scripts that do some data processing or transformation. Rectangles with light grey backgrounds are input data. Rectangles with orange backgrounds are intermediate data products. Retangles with red backgrounds are model outputs. Arrows indicate flow of data from one component to the next. I have tried to loosely colour code to make it easier to follow and isolate sub-loops within the main model structure.
 
 ### Hardware
 
-The computational requirements of this script vary depending upon which functions are toggled on/off. We have been tried to keep as much of the processing out of memory as possible, only loading arrays when unavoidable. We have also made extensive use of Dask for distributing the work over the available processing cores, so significant acceleration will be experienced when this software is run of machines with more available cores. We have been using a Microsoft Azure Linux Data Science Machine with 72 processing cores (ID = Fs72). The cost for this virtual machine is ~£3/hour. On the Fs72 VM it takes just over 21 hours to process 1 year's worth of imagery (6 tiles, JJA, all processing options toggled ON, including uploading results to blob storage). Once the main processing had been achieved we continued to use an Azure VM for the data analysis but since we had less need for large multi-core processing we resized to a 16 core E16s which cost ~90p/hour. Maintaining a smaller VM rather than doing the data analysis locally was preferred because of much easier and faster access to the large amount of output data (2.4 TB) stored remotely in Azure storage blobs. By far the most time consuming step in the pipeline is the uploading of output data to blob storage, the slowest part of the actual processing pipeline is the radiative transfer model inversion.
+The computational requirements of this script vary depending upon which functions are toggled on/off. I have been tried to keep as much of the processing out of memory as possible, only loading arrays when unavoidable. To do so, I have made extansive use of the ythin packages xarray and Dask. Dask allows the processing to be distributed over multiple cores. The most computationally expensive parts of the workflow can be readily parallelised so dramatic acceleration is experienced when this software is run on a machine with many processing cores. By default, I run this code on a Microsoft Azure F72 Linux Data Science Machine with 72 processing cores. At the time of writing this, the cost for the F72 was approximately £3/hour. It takes about 3-6 hours to process one year's imagery for one tile, depending on how many images pass the initial quality control. Once the main processing had completed, I switched to a cheaper D16 virtual machine for analysing and plotting the data. Maintaining a cheap VM rather than doing the data analysis locally was preferred because of much easier and faster access to the large amount of output data (2.4 TB) stored remotely in storage blobs. Frustratingly, by far the slowest step in the entire workflow was saving the final datasets to disk (using xr.to_netcdf()).
 
 ### Environment
 
-We used Ubuntu 16.04 on a Microsoft Azure F72 Linux Data Science Machine with 128 GB RAM. Our code was written in Python 3.5 via Anaconda 4.5.11 and developed using VSCode 1.29.1. Our Python environment can be replicated as follows: 
+Our code was written in Python 3.5 via Anaconda 4.5.11 and developed using VSCode 1.29.1. Our Python environment can be approximated as follows: 
 
-    conda create -n IceSurfClassifier -c conda-forge python ipython xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
+    conda create -n IceSurfClassifier -c conda-forge python ipython numpy xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
     pip install azure sklearn-xarray sentinelsat dask
 
-or alternatively Ubuntu 16.04 users can configure the environment from environment.yaml using:
+or alternatively Ubuntu users can replicate our development environment precisely from the environment.yaml file provided, using:
 
     conda env -f environment.yml
 
@@ -58,7 +56,7 @@ And for Copernicus SciHub:
 
 Create your `PROCESS_DIR`, e.g. `/scratch/RISA/`. The `PROCESS_DIR` is the folder where temporary files, images and eventually the output data are stored. The pickled classifier and mask should also be saved to the `PROCESS_DIR` in advance of running the classifier script.
 
-The simplest way to set these environment variables is to use a shell script. An example, `setup_classifier.sh`, has been provided with this repository. Make a copy that you can modify to suit your environment. The copy should not be committed back to this repository.
+The simplest way to set these environment variables is to use a shell script. An example, `setup_classifier.sh`, has been provided with this repository. Make a copy that you can modify to suit your environment. 
 
 With a shell script created to set these environment variables, execute `source setup_classifier.sh` in the terminal in which you plan to run the classifier. The variables will be available for the duration of the session. 
 
@@ -79,16 +77,19 @@ Options:
 5) classifier: this is the file name for the pickled sklearn classifier to use
 6) icemask: this is the file name for the ice mask to use
 7) resolution: the desired resolution of the sentinel 2 imagery
-8) savefigs: now redundant option to toggle figure saving on/off
-9) retrieve_disort_params: toggle to control whether the RTM inversion function is run. If true, grain size, density, algal concentration, dust concentration are included in the output data, if not they are absent.
-10) interpolate_cloud: toggle to control whether pixels obscured by cloud are interpolated over to give continuous data across the icy part of the image
-11) interpolate_missing_tiles: toggle to control whether missing dates are infilled by linear interpolation between "good" dates
-12) calculate_melt: toggle to control whether melt rates are calculated pixelwise across the image area. This is off by default because although the eb modelling works, elevation and meterological input valus are currently held constant, which is of limited value.
-13) downsample_outdata: toggle to determine whether to include edaily data, or to reduce the temporal resolution to save memory
-14) outData_resolution: provide an integer to determine the temporal resolution, in days, of the outData
-15) remove_individual_files: toggle to determine whether, after the collated data file is created, the individual files used are discarded to kept
-16) upload_to_blob: toggle to control whether the output datasets are uploaded to Azure blob storage and deleted from the local disk. This can be slow depending upon internet upload speed and file size (1 tile, 1 month = ~30 GB)
-    
+8) retrieve_snicar_params: toggle to control whether the RTM inversion function is run. If true, grain size, density, algal concentration, dust concentration are included in the output data, if not they are absent.
+9) interpolate_missing_tiles: toggle to control whether missing dates are infilled by linear interpolation between "good" dates
+10) calculate_melt: toggle to control whether melt rates are calculated pixelwise across the image area. This is off by default because although the eb modelling works, elevation and meterological input valus are currently held constant, which is of limited value.
+11) downsample_outdata: toggle to determine whether to include edaily data, or to reduce the temporal resolution to save memory
+12) outData_resolution: provide an integer to determine the temporal resolution, in days, of the outData
+13) remove_individual_files: toggle to determine whether, after the collated data file is created, the individual files used are discarded to kept
+14) upload_to_blob: toggle to control whether the output datasets are uploaded to Azure blob storage and deleted from the local disk. This can be slow depending upon internet upload speed and file size (1 tile, 1 month = ~30 GB)
+15)define wavelength range for snicar inversion: provide lower (wlmin) and upper (wlmax) wavelengths to match snicar
+and the spectral resolution - default is 
+wlmin = 0.2
+wlmax = 5
+wlstep = 0.01
+16) idx is the define indexes in the wavelengths array that correspond to S2 wavelengths, default is: idx = [29, 36, 46, 50, 54, 58, 66, 141, 200] 
 
 Thresholds:
 
@@ -138,7 +139,7 @@ Remote Ice Surface Explorer
 |           |---ICE_MASK.nc
 |           |---merged_mask.tif
 |           |---Sentinel2_classifier.pkl
-|           |---SNICAR_LUT_2058.npy
+|           |---SNICAR_LUTs
 |           |---will be populated with band images and auto-flushed at end of run
 |           |
 |            Outputs
@@ -164,7 +165,7 @@ This will trigger a batch download of the relevant files and automatically apply
 
 Note that since August 2019 any Sentinel-2 imagery older than 18 months is no longer immediately available from Copernicus and instead they are held in a long term storage repository called the LTA (long term archive). A request for a file in the LTA triggers the retrieval of the file server-side, making it available for later download. The process of retrieving the files from LTA can take between minutes and hours and they remain available for 3 days. This means download_process_s2.py will sometimes fail, but it will trigger the release of files from LTA, so the fix is simply to run it again later, possibly a few times, until the files are available for download.
 
-Also, note that the downloading sometimes fails on multi-month runs. I have not been able to diagnose why exactly this occurs but becaue the program does not crash or return any exceptions, it simply hangs at the end of each month, I suspect the issue is server-side. The workaround is to download one month's worth of imagery at a time.
+Also, note that the downloading sometimes fails on multi-month runs. I have not been able to diagnose why exactly this occurs but because the program does not crash or return any exceptions, it simply hangs at the end of each month, I suspect the issue is server-side. The workaround is to download one month's worth of imagery at a time.
 
 ## How to run
 
@@ -186,13 +187,7 @@ After the main script has run and the output data has been generates, some manua
 
 The analysis and plotting are achieved using the script "RISA_plot_figures.py". There are several functions in that script that can be called with user defined variables for generating the various maps, plots and summary datasets.
 
-There are also additional scripts provided that enable model validation and other associated analyses, including comparisons between modelled and measured cell concentrations (FieldSpectra_LUT_comparison.py) and for building the spectral lookup table (LUTbuilder.py, must be run as part of separate repository bioDISORTpy).
-
-## Example Outputs
-
-![Output Maps](RISA_OUT/Figures_and_Tables/Fig4_draft.jpg)
-
-The maps, histograms and colorbar in the above figure are all outputs from RISA_plot_figures.py. They have been collated and organised into a single figure manually using illustration software. Subplot A shows a true-colour composite of the SW GrIS with some particularly low albedo areas marked. Subplot B shows the summer-mean algal cell concentration predicted using the inverted RTM for 2016, 2017, 2018 and 2019. The histograms show the frequency distribution of algal cell concentrations in individual pixels across the area shown in A and B.
+There are also additional scripts provided that enable model validation and other associated analyses, including comparisons between modelled and measured cell concentrations (FieldSpectra_LUT_comparison.py) and for building the spectral lookup table. Some of these depend upon access to BioSNICAR_GO_PY, which can be downloaded from www.github.com/jmcook1186/BioSNICAR_GO_PY/.
 
 ## Functionality
 
@@ -208,10 +203,7 @@ Surface albedo is calculated using Liang et al's (2000) narrowband to broadband 
 
 There is an option in the template file to retrieve ice surface parameters using an inverted radiative transfer model. The RTM of choice is BioSNICAR (www.github.com/jmcook1186/BioSNICAR_GO_PY/) run using the adding-doublng solver. If the inverted RTM is toggled ON in the template, then the spectral reflectance in each pixel of the S2 tile is compared to a lookup table of simulated spectra. The appropriate zenith angle is selected using the time of aquisition for the S2 image and the site coordinates, date and time from the image metadata. The RTM parameters (WC thickness, grain size, density, algae concentration) used to generate the closest-matching spectra (measured as mean absolute error) are assigned to that pixel, producing maps of ice physical properties and light absorbing particle concentrations. Dust is not quantified because a) previous research indicates that it is insignificant as a driver of surface albedo, b) initial tests indicated that dust was taking effectively random values rather than being a significant controlling variable for the spectral albedo.
 
-Note that despite the LUT approach, the RTM inversion is computatonally expensive and would ideally be run on some HPC resource. We are using a Microsoft Azure F72 Linux Data Science Machine with 72 cores to distribute the processing, which enables the retrieval function to complete in about 7 minutes per tile. Increasing the size of the LUT increases the computation time. Currently the LUT comprises 2400 individual simulated spectra, produced by running snicar with all possible combinations of 6 grain sizes, 5 densities, 8 dust concentrations and 10 algal concentrations. 
-
-
-Note also that predictions for cell concentrations are ouput in cells/mL. The conversion from ppb to cells/mL is as follows:
+Note that predictions for cell concentrations are ouput in cells/mL. The conversion from ppb to cells/mL is as follows:
 
 1. Calculate cell volume from empirical measurements
 
@@ -237,11 +229,11 @@ If the SNICAR inversion is toggled ON, the 2DBA band ratio index and prediction 
 
 
 ### Missing pixel interpolation
-
+NB: TOGGLED OFF BY DEFAULT
 Images where pixels have been masked out using the CloudMask (the sensivity of which is controlled by the user-defined variable cloudCoverThreshold) can have those pixels infilled using 2D nearest neighbour interpolation by toggling the "interpolate_cloud" option in the template. However, this is very slow, and as an alternative, the cloudy pixels can be infilled using the layer median. The median-infill is the version used in the current version to make the code run in an acceptable amount of time.
 
 ### Missing date interpolation
-
+NB: TOGGLED OFF BY DEFAULT
 There is an option to toggle interpolation on/off. If interpolation is toggled on, the script will use pixel-wise linear interpolation to generate synthetic datasets for each missing date in the time series. Dates may be missing from the time series sue to a lack of overpass or a data quality issue such as excessive cloud cover. The interpolation function identifies these missing tiles, then identifies the most recent and nearest future dates where a valid dataset was acquired. It then applies a point-to-point linear regression between the values in each pixel in the past image and the corresponding pixel in the future image. The pixel values are then predicted using the regression equation for the missing dates. Recommend also scanning through the images manually after interpolation because occasionally interpolating pixels that were cloud-free in the past and cloudy in the future or vice versa can lead to unrealistic interpolation results. Anomalous dates should be manually discarded or alternatively the interpolation function could be run as a standalone with "good" past and future tiles manually selected.
 
 
@@ -249,28 +241,11 @@ There is an option to toggle interpolation on/off. If interpolation is toggled o
 
 ### Maps
 
-A specific tile on a specific date has associated with it several variables of interest, including albedo, surface class, grain size, ice density, dust concentration, algae concentration. Each of these variables is mapped over a 5490 x 5490 pixel grid, as per the original Sentinel-2 image. Each of these variables is therefore stored as a 5490 x 5490 array of values. These are stored in an xarray dataset with common cartographic and georeferencing attributes, dimensions and coordinates but unique values. For ach individual tile. the values on each date are collated into a single large NetCDF file. These files are large - a single month for a single tile occupies ~ 30GB of memory - one summer's data for a single tile occupies ~90GB.
-
-From April 2020, these data are optionally downsampled. By default this is to 3-day temporal resolution, but this can be changed easily in the template file. This was deemed to be an acceptable trade-off between memory requirements and resolution. Five tiles can be analysed over 5 years of the Sentinel-2 record in 750GB of storage space using the 3-day resolution, whereas 1-day resolution data occupied 2.3 TB.
-
-### Summary Data
-
-Because of the large size of the maps described above, summary datasets are also saved as NetCDFs. These include descriptive metrics for each tile on each date, including the mean, standard deviationand frequency for each variable. These are small files that only contain these summary metrics, not the original dataset. These summary data include the mean and standard deviation of each metric across each tile, but excluding pixels that the classifier identified as SN, WAT or CC (i.e. limited to areas of bare ice that are not melt ponds or cryoconite-covered).
-
-Note that these data are opened using xarray's open_dataarray() function, not open_dataset().
+A specific tile on a specific date has associated with it several variables of interest, including albedo, surface class, weathering crust thickness, ice density, algae concentration. Each of these variables is mapped over a 5490 x 5490 pixel grid, as per the original Sentinel-2 image. Each of these variables is therefore stored as a 5490 x 5490 array of values. These are stored in an xarray dataset with common cartographic and georeferencing attributes, dimensions and coordinates but unique values. 
 
 ### Metadata
 
-There is a range of metadata output by the scripts, including text files detailing the model configuration, lists of tile/date that were analysed, those that were rejected by image quality control, and those generated by the interpolation function. These help to record the precise conditons under which the script was run. There is also a separate .csv file containing the downloaded Sentinel-2 metadata for each file, plus additional columns for calculated solar zenith angle.
-
-## Output Data Post-processing
-
-The script post-processing.py is available for wrangling the summary data. The main program saves two netCDF files to the Azure storage container for each tile/year. The first is simple summary statistics including the mean and standard deviation of the albedo, grain size, algal concentration, ice density, dust concentration and the retrieval date. The second contains the same metrics but divided by the surface class as predicted by the random forest classifier (ie mean albedo for HA, standard deviation of algal concentration for LA etc. etc.)
-The post-processing script concatenates all of this data into a convenient .csv file that can be easily interrogated using Pandas or exported to a spreadsheet program. These are automatically saved to /BigIceSurfClassifier/RISA_OUT/PROCESSED/.
-
-## Plotting
-
-Plotting scripts are still to be finalised as the relevant plots are still being adjusted - the full datasets for each variable for each tile and DOY occupy 2.4TB on disk, so some decisions must be made about what specifically to extract and plot. Aim to be completed by 01/09/20.
+There is a range of metadata output by the scripts, including text files detailing the model configuration, lists of tile/date that were analysed, those that were rejected by image quality control. These help to record the precise conditons under which the script was run. There is also a separate .csv file containing the downloaded Sentinel-2 metadata for each file with additional columns for calculated solar zenith angle.
 
 ## Troubleshooting
 
@@ -331,6 +306,11 @@ April 2020: revised cloud interpolation - now infills cloud NaNs with the layer 
 April 2020: system test revealed bug in multi-year runs. The interpolate_missing_date() function fails when iterating over multiple years or tiles other than 22wev. Need to investigate why this is happening. UPDATE: Fixed for multiple tiles - issue was accidental hardcoding of tile-specific folder in filepath.
 
 Aug 2020: Update system to include calculation of 2DBA index and 2DBA biomass prediction using equations from Wang et al. 2020. Also debugged DISORT LUT builder as there was an additional zero in the definition of one of the algal biomass concentrations (250000 instead of 25000 ppb). Also changed the summary statistics so that variable means and stds were calculated with pixels classed as SN, WAT or CC omitted.
+
+Jan 2021: Replace DISORT with new SNICAR model with the adding doubling solver. 
+
+Feb 2021: use 2BDA index as first pass filter for restricting LUT size.
+
 
 ## Contributions
 
