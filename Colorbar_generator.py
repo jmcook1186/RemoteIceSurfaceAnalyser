@@ -24,8 +24,8 @@ def generate_colorbar(min_val, max_val, cmap, ticks, savepath):
 # DEFINE OPTIONS
 
 min_val = 0 # lowest value on colorbar
-max_val = 20000 # highest value on colorbar
-cmap = 'BuPu' # color scheme
-ticks =[0, 5000, 10000, 15000, 20000] # labels to include on colorbar
-savepath = '/home/joe/Code/Remote_Ice_Surface_Analyser/Manuscript/Figures/Colorbar_20000.jpg'
+max_val = 0.2 # highest value on colorbar
+cmap = 'YlGn' # color scheme
+ticks =[0, 0.05, 0.1, 0.15, 0.2] # labels to include on colorbar
+savepath = '/home/joe/Code/Remote_Ice_Surface_Analyser/Manuscript/Figures/Colorbar_dz.jpg'
 generate_colorbar(min_val, max_val, cmap, ticks, savepath)
