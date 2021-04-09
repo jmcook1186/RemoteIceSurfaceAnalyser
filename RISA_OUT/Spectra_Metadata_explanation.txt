@@ -1,0 +1,37 @@
+Details for Spectra_Metadata.csv
+
+filename: sample ID for field spectrum 
+ 
+measured_cells: glacier algae concentration as measured by Cook et al. 2020 (cells/mL)
+
+density_fwd_model: density of ice column as predicted by the forward model (hyperspectral) (kg m-3)
+
+reff_fwd_model: effective bubble radius of ice column as predicted by the forward model (hyperspectral) (um)
+
+dz_fwd_model: thickness of 2nd layer predicted by forward model, represents WC thickness (top layer fixed at 0.001um) (m)
+
+spec_error_fwd_model: mean difference in predicted spectral albedo compared to field meausred-spectrum or each sample (dimensionless albedo units)
+
+algae_ppb_fwd_model: algal cells on upper surface in ppb predicted by the forward model (hyperspectral) (ppb)
+
+algae_cells_fwd_model: algal cells predicted by forward model converted to cells/mL (cells/mL)
+
+density_inv_model: density of ice column as predicted by the inverse model (S2 wavelengths) (kg m-3)
+
+reff_inv_model: effective bubble radius of ice column as predicted by the inverse model (S2 wavelengths) (um)
+
+dz_inv_model: thickness of 2nd layer predicted by inverse model, represents WC thickness (top layer fixed at 0.001um) (m)
+
+algae_ppb_inv_model: algal cells on upper surface in ppb as predicted by the inverse model (S2 wavelengths) (ppb)
+
+algae_cells_inv_model: algal cells predicted by inverse model converted to cells/mL (cells/mL)
+
+BDA2_centre: 2BDA index value calculated using the S2 centre wavelengths only (dimensionless index)
+
+cells_BDA2_centre_wang: 2BDA (centre wavelengths) converted to cell concentration in cells/mL using Wang et al. (2018,2020) exponential equation (cells/mL)
+
+cells_BDA2_centre_new: 2BDA (centre wavelengths) converted to cell concentration in cells/mL using new linear equation (Cook et al. 2021) (cells/mL) 
+
+
+
+
