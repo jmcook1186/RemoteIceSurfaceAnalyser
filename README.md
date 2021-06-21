@@ -306,7 +306,7 @@ Jan 2021: Replace DISORT with new SNICAR model with the adding doubling solver.
 
 Feb 2021: use 2BDA index as first pass filter for restricting LUT size.
 
-June 2021: Final version run for paper submission. This repo updated to synch with version on VM. Future use of this code would probably benefot from a bit of refactoring and tidying.
+June 2021: Final version run for paper submission. This repo updated to synch with version on VM. Future use of this code would probably benefit from a bit of refactoring and tidying.
 
 ## Contributions
 
