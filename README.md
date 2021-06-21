@@ -6,7 +6,7 @@ This code is controlled using a .template file that is pre-configured for the so
 
 22WEA, 22WEB, 22WEC, 22WET, 22WEU, 22WEV
 
-The initila downloading and pre-processing of Sentinel-2 imagery only needs to be completed once as the processed L2A imagery is now stored in an Azure blob container and is downloaded according to the required tile/date and processed from there. Currently, June, July and August images for 2016-2019 are available in the blob store. To extend this to more recent dates the code must either be linked to a different image repository or the image downloading and processing scripts provided here used to add more imagery to the existing blob container.
+The initial downloading and pre-processing of Sentinel-2 imagery only needs to be completed once as the processed L2A imagery is then stored in an Azure blob container and downloaded according to the required tile/date and processed from there. Currently, June, July and August images for 2016-2019 are available in the blob store. To extend this to more recent dates the code must either be linked to a different image repository or the image downloading and processing scripts provided here used to add more imagery to the existing blob container.
 
 ## Model Overview
 
@@ -20,7 +20,7 @@ The computational requirements of this script vary depending upon which function
 
 ### Environment
 
-Our code was written in Python 3.5 via Anaconda 4.5.11 and developed using VSCode 1.29.1. Our Python environment can be approximated as follows: 
+Our code was written in Python 3.6 via Anaconda 4.5.11 and developed using VSCode 1.29.1. Our Python environment can be approximated as follows: 
 
     conda create -n IceSurfClassifier -c conda-forge python ipython numpy xarray scikit-learn gdal georaster gdal seaborn rasterio matplotlib
     pip install azure sklearn-xarray sentinelsat dask
@@ -126,12 +126,7 @@ Remote Ice Surface Explorer
 |----- .cscihub_secret
 |
 |-----RISA_OUT  (this directory is for output data)
-|           |
-|           |---will be populated with .nc and .csv files
-|           |
-|           |---Figures_and_Tables
-|                   |
-|                   |---will be populated with outputs
+|           
 |
 |
 |-----Process_Dir
@@ -212,7 +207,7 @@ Note that predictions for cell concentrations are ouput in cells/mL. The convers
 2. Calculate per-cell mass from volume and density
 
     the cell density is taken from the literature to be 1400 kg/m3 which is
-    0.0014 ng/um3. Then multiply by  1 - water fraction to get dry mass. There is uncertainty around this value and past studies have ranged from 0.5 - 0.8. I used it as a tuning parameter bound by those literature values and found 0.7 to be optimal for reducing the error between measured and predicted concentrations. This gives dry weight per cell, which I calculate to be 0.84 ng.
+    0.0014 ng/um3. Then multiply by  1 - water fraction to get dry mass. There is uncertainty around this value and past studies have ranged from 0.5 - 0.8. I used it as a tuning parameter bound by those literature values and found 0.7 to be optimal for reducing the error between measured and predicted concentrations. This gives dry weight per cell, which I estimate to be 0.74 ng.
 
 3. Use per-cell dry mass to calculate cells/mL from ppb
    
@@ -225,7 +220,7 @@ cells/mL = ppb / (((((PI() * 4^2) * 40)* 0.0014)*0.3) /0.917)
 
 ### 2DBA Band ratio index and prediction
 
-If the SNICAR inversion is toggled ON, the 2DBA band ratio index and prediction is calculated by default. The 2DBA index was proposed by Wang et al (2018) for biomass quantification. It is the ratio between reflectance in Sentinel 2 bands 5 / band 4. A conversion from index value to cell concentration is also applied.
+If the SNICAR inversion is toggled ON, the 2DBA band ratio index and prediction is calculated by default. The 2DBA index was proposed by Wang et al (2018) for biomass quantification. It is the ratio between reflectance in Sentinel 2 bands 5 / band 4. A conversion from index value to cell concentration is also applied which was derived from linear regression between measured cell concentrations and BDA2 index values. We diverge from Wang et al.'s exponential equation because of frequent unrealistically high cell concentration estimates in 20m Sentinel-2 data.
 
 
 ### Missing pixel interpolation
@@ -311,6 +306,7 @@ Jan 2021: Replace DISORT with new SNICAR model with the adding doubling solver.
 
 Feb 2021: use 2BDA index as first pass filter for restricting LUT size.
 
+June 2021: Final version run for paper submission. This repo updated to synch with version on VM. Future use of this code would probably benefot from a bit of refactoring and tidying.
 
 ## Contributions
 

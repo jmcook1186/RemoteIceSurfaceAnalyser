@@ -294,9 +294,6 @@ def img_quality_control(img_path, Icemask, Cloudmask, minimum_useable_area):
 
 def imageinterpolator(years, months, tile, proj_info):
     """
-
-    ** NOT CURRENTLY USED **
-
     Function identifies the missing dates in the image repository - i.e those days where S2 images are not availabe due to
     cloud cover, insufficient ice coverage, a download problem or simply lack of S2 overpass. For each missing date, this
     function finds the closest previous and closest future images stored in the repository and applies a linear inteprolation
@@ -577,11 +574,7 @@ def imageinterpolator(years, months, tile, proj_info):
 
 
 def create_outData(tile,year,month,savepath):
-    
-    """
-    creates single NetCDF output and saves to disk
 
-    """
     outPath = str(savepath)
     dateList = []
 
@@ -598,8 +591,11 @@ def create_outData(tile,year,month,savepath):
     for i in file_list:
         dateList.append(i.split(str(tile+'_'))[1].split('_Class')[0])
 
+    print(dateList)
+    print(file_list)
+
     # OPEN ALL FLES INTO ONE DATASET, SAVE CONCATENATED FILE TO NETCDF
-    ds = xr.open_mfdataset(file_list,concat_dim='date',chunks={'x': 2000, 'y': 2000})
+    ds = xr.open_mfdataset(file_list,concat_dim='date',combine='nested',chunks={'x': 2000, 'y': 2000})
     ds = ds.assign_coords(date=dateList)
 
     ds.to_netcdf(str(outPath+'/FULL_OUTPUT_{}_{}_Final.nc'.format(tile,year)))
@@ -615,3 +611,64 @@ def create_outData(tile,year,month,savepath):
         os.remove(f)
 
     return dateList
+
+
+
+
+def cloud_interpolator(dataset):
+    
+    """
+    
+    In this cloud interpolator, the missing values are simply filled with the median value for that layer
+
+    """
+
+    # define list of layers depending upon whether snicar inversion is ON
+    if config.get('options','retrieve_snicar_params')=='True':
+
+        layers = [dataset.classified, dataset.albedo, dataset.density, dataset.dz, dataset.reff, dataset.algae]
+    
+    else:
+    
+        layers = [dataset.classified, dataset.albedo]
+    
+    # define mask
+    mask = dataset.FinalMask
+
+    # loop through layers
+    for i in range(len(layers)):
+
+        layer = layers[i]
+        layer_median = layer.median().values # calculate median value
+        layer =layer.where(layer>=0,layer_median) # replace nanswith median
+
+        if i == 0:
+            dataset.classified.values = layer
+            layer = None
+
+        elif i == 1:
+            dataset.albedo.values = layer
+            layer = None
+
+        elif i == 2:
+            dataset.density.values = layer
+            layer = None
+
+        elif i == 3:
+            dataset.dz.values = layer
+            layer = None
+        
+        elif i == 4:
+            dataset.reff.values = layer
+            layer = None
+
+        elif i == 5:
+            dataset.algae.values = layer
+            layer = None
+
+        else:
+            print ("ERROR IN PIXELWISE CLOUD INTERPOLATION: counter out of range")
+
+    dataset = dataset.where(mask > 0)
+
+    return dataset

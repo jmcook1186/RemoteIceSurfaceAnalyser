@@ -130,3 +130,5 @@ Process_Dir/
 \.azure_secret
 
 \.cscihub_secret
+
+Manuscript/

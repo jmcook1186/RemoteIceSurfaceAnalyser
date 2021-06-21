@@ -375,25 +375,31 @@ def corr_heatmaps(path):
     import seaborn  as sns
     import matplotlib.pyplot as plt
 
-    d2016 = [[1,-0.42,-0.56, 0.26],
-    [-0.42,1,0.80,-0.17],
-    [-0.56,0.80,1,-0.06],
-    [0.26,-0.17,-0.06,1]]
+    # ['algae', 'albedo', 'dz', 'density']
+    
+    d2016 = [[1, -0.57, -0.76, 0.144, 0.32],
+    [-0.57, 1, 0.88, -0.71, -0.786],
+    [-0.76, 0.88, 1, -0.47, -0.61],
+    [0.144, -0.71, -0.47, 1, 0.83],
+    [0.32, -0.786, -0.61, 0.83, 1]]
 
-    d2017 =[[1, -0.28, -0.44, 0.29],
-    [-0.28, 1, 0.76, -0.11],
-    [-0.44, 0.76, 1, -0.06],
-    [0.19, -0.11, -0.06, 1]]
+    d2017 =[[1, -0.35, -0.60, 0.11, 0.2],
+    [-0.35, 1, 0.87, -0.71, -0.714],
+    [-0.60,0.87,1,-0.58, -0.67],
+    [0.11, -0.71, -0.58, 1, 0.86],
+    [0.2, -0.714, -0.67, 0.86, 1]]
 
-    d2018 = [[1, -0.15, -0.34, 0.34],
-    [-0.15, 1, 0.67, -0.25],
-    [-0.34, 0.67, 1, 0.-0.11],
-    [0.34, -0.25, -0.11, 1]]
+    d2018 = [[1, -0.22, 0.53, 0.06, 0.14],
+    [-0.22, 1, 0.84, -0.71, -0.77],
+    [0.53, 0.84, 1, -0.58, -0.68],
+    [0.06, -0.71, -0.58, 1, 0.87],
+    [0.14, -0.77, -0.68, 0.87,1]]
 
-    d2019 = [[1, -0.41, -0.54, 0.29],
-    [-0.41, 1, 0.82, -0.33],
-    [-0.54, 0.82, 1, -0.17],
-    [0.29, -0.33, -0.17, 1]]
+    d2019 = [[1, -0.56, -0.73, 0.14, 0.3],
+    [-0.56, 1, 0.87, -0.75, -0.84],
+    [-0.73, 0.87, 1, -0.48, -0.62],
+    [0.14, -0.75, -0.48, 1, 0.84],
+    [0.3, -0.84, -0.62, 0.84,1]]
 
     f,(ax1,ax2,ax3,ax4,axcb) = plt.subplots(1,5,gridspec_kw={'width_ratios':[1,1,1,1,0.08]},figsize=(15,5))
     
@@ -425,12 +431,12 @@ def corr_heatmaps(path):
     axcb.set_ylabel("Pearson's R")
 
     for ax in [g1,g2,g3,g4]:
-        tl = ['algae', 'albedo', 'dz', 'density']
+        tl = ['algae', 'albedo', 'dz', 'density','r_eff']
         ax.set_xticklabels(tl, rotation=90)
         ax.set_yticklabels([])
         ax.set_yticks([])
 
-    g1.set_yticks([0,1,2,3])
+    g1.set_yticks([0,1,2,3,4])
     g1.set_yticklabels(tl, rotation=45)
 
     plt.tight_layout()
@@ -721,6 +727,12 @@ def time_series(path, var):
 
 
 
+
+
+
+
+
+
 def add_boxes_to_rgb():
 
     import matplotlib.image as img
@@ -744,3 +756,53 @@ def add_boxes_to_rgb():
 
     return
 
+
+
+def colorbar(vmin, vmax, cmap):
+    """
+    function to create a jpg colorbar for building annual and
+    JJA map figures
+
+    """
+
+    vmin = vmin / (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
+    vmax = vmax / (np.pi*(4**2*40)*0.0014*0.3*(1/0.917)*10)
+
+    fig, ax = plt.subplots(1, 1)
+
+    fraction = 1
+
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+    cbar = ax.figure.colorbar(
+                mpl.cm.ScalarMappable(norm=norm, cmap=cmap),
+                ax=ax, pad=.05, extend='both', fraction=fraction)
+
+    ax.axis('off')
+    
+    plt.savefig(str(path+'colorbar.jpg'),dpi=300)
+    
+    return
+
+
+# USER DEFINED VARIABLES
+# year = '2016'
+# var='albedo'
+# path = str('/datadrive2/BigIceSurfClassifier/Process_Dir/outputs/')
+# dpi = 150
+# vmin = 0
+# vmax = 1
+# cmap = 'viridis'
+
+
+# # FUNCTION CALLS (uncomment as needed)
+
+# JJA_maps(path, var, year, vmin, vmax, dpi=dpi)
+#annual_maps(path, var, year, vmin, vmax, dpi=300)
+#annual_stats(path, var, year)
+#plot_BandRatios(savepath)
+#JJA_stats(path, var, year)
+#time_series(path, var = 'algae')
+
+# for year in ['2016','2017','2018','2019']:
+#     annual_histograms(path, var, year)
+# colorbar(vmin,vmax,cmap)

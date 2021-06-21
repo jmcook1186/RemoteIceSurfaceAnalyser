@@ -24,7 +24,7 @@ def create_grid_mapping(crs):
 
     srs = osr.SpatialReference()
     srs.ImportFromProj4(crs) 
-    gm = xr.DataArray(0, encoding={'dtype': np.dtype('int8')})
+    gm = xr.DataArray(0)
     gm.attrs['projected_crs_name'] = srs.GetAttrValue('projcs')
     gm.attrs['grid_mapping_name'] = 'universal_transverse_mercator'
     gm.attrs['scale_factor_at_central_origin'] = srs.GetProjParm('scale_factor')
@@ -59,14 +59,12 @@ def create_latlon_da(geotiff_fn, x_name, y_name, x_coords, y_coords, proj_info, 
                     'dtype': 'int16', 
                     'scale_factor': 0.000000001}
 
-    lon_array = xr.DataArray(lon, coords=coords_geo, dims=['y', 'x'],
-                             encoding=encoding)
+    lon_array = xr.DataArray(lon, coords=coords_geo, dims=['y', 'x'])
     lon_array.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
     lon_array.attrs['units'] = 'degrees'
     lon_array.attrs['standard_name'] = 'longitude'
 
-    lat_array = xr.DataArray(lat, coords=coords_geo, dims=['y', 'x'],
-                             encoding=encoding)
+    lat_array = xr.DataArray(lat, coords=coords_geo, dims=['y', 'x'])
     lat_array.attrs['grid_mapping'] = proj_info.attrs['grid_mapping_name']
     lat_array.attrs['units'] = 'degrees'
     lat_array.attrs['standard_name'] = 'latitude'

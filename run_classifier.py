@@ -39,7 +39,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sentinel2_tools
 import sentinel2_azure
-import Ice_Surface_Analyser
+import Big_Sentinel_Classifier
 import xr_cf_conventions
 import multiprocessing as mp
 import gc
@@ -47,11 +47,6 @@ import gc
 ###################################################################################
 ######## DEFINE BLOB ACCESS, GLOBAL VARIABLES AND SET UP EMPTY LISTS/ARRAYS #######
 ###################################################################################
-
-download_problem_list = []  # empty list to append details of skipped tiles due to missing info
-QC_reject_list = []  # empty list to append details of skipped tiles due to cloud cover
-good_tile_list = []  # empty list to append tiles used in analysis
-dates = []
 
 # Get project configuration
 config = configparser.ConfigParser()
@@ -64,7 +59,14 @@ azure = sentinel2_azure.AzureAccess(azure_cred.get('account', 'user'),
                                     azure_cred.get('account', 'key'))
 
 # Open classifier
-isa = Ice_Surface_Analyser.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
+bsc = Big_Sentinel_Classifier.SurfaceClassifier(os.environ['PROCESS_DIR'] + config.get('options', 'classifier'))
+
+# set up empty lists and dataframes to append to
+download_problem_list = []  # empty list to append details of skipped tiles due to missing info
+QC_reject_list = []  # empty list to append details of skipped tiles due to cloud cover
+good_tile_list = []  # empty list to append tiles used in analysis
+masterDF = pd.DataFrame()
+dates = []
 
 # send config data to log file and report to console
 print("WRITING PARAMS TO LOG FILE\n")
@@ -83,17 +85,16 @@ text_file.close()
 
 print("RUNNING WITH THE FOLLOWING CONFIGURATION:")
 print("SNICAR CONFIG = ", config.get('options','retrieve_snicar_params'))
-print("FIGURE CONFIG = ", config.get('options','savefigs'))
 print("INTERPOLATION CONFIG = ", config.get('options','interpolate_missing_tiles'))
 print("ENERGY BALANCE CONFIG = ", config.get('options','interpolate_missing_tiles'))
 print("TILES: ", config.get('options','tiles'), " YEARS: ", config.get('options','years'), "MONTHS: ", config.get('options','months'))
 print("Thresholds: Cloud cover= ", config.get('thresholds','cloudCoverThresh'), " Ice Area = ", config.get('thresholds','minArea'))
 print()
 
-
 ###################################################################################
 ######################### SET TILE AND DATE RANGE #################################
 ###################################################################################
+
 
 years = json.loads(config.get('options', 'years'))
 months = json.loads(config.get('options', 'months'))
@@ -109,6 +110,7 @@ for year in years:
 
         for date in dates_pd:
             dates.append(date.strftime('%Y%m%d'))
+
 
 ###################################################################################
 ############### RUN FUNCTIONS & HEALTHCHECKS ######################################
@@ -138,7 +140,7 @@ for tile in tiles:
 
         print("\n DOWNLOADING FILES: {} {}\n".format(tile,date))
 
-        #query blob for files in tile and date range
+    #     #query blob for files in tile and date range
         filtered_bloblist, download_flag = azure.download_imgs_by_date(tile,
                                                                       date, os.environ['PROCESS_DIR'])
 
@@ -170,24 +172,21 @@ for tile in tiles:
                 QC_reject_list.append('{}_{}_useable_area = {}'.format(tile,date,np.round(useable_area,2)))
 
 
-            #############################################
-            ## IF HEALTHCHECKS OK, PROCEED WITH ANALYSIS
-            #############################################
-            else: # i.e. condition = healthcheck passed
-                
+
+            else:
                 print("\n NO FLAGS, proceeding with image analysis for {}, {}".format(tile,date))
                 good_tile_list.append('{}_{}_useable_area = {} '.format(tile, date, np.round(useable_area,2)))
 
-                s2xr = isa.load_img_to_xr(os.environ['PROCESS_DIR'],
+                s2xr = bsc.load_img_to_xr(os.environ['PROCESS_DIR'],
                                           int(config.get('options', 'resolution')),
                                           Icemask,
                                           Cloudmask)
 
                 # apply classifier and calculate albedo
-                predicted = isa.classify_image(s2xr, savepath, tile, date, savefigs=True)
-                albedo = isa.calculate_albedo(s2xr)
-                Index2DBA, predict2DBA = isa.calculate_2DBA(s2xr)
-                mask2 = isa.combine_masks(s2xr)
+                predicted = bsc.classify_image(s2xr, savepath, tile, date, savefigs=True)
+                albedo = bsc.calculate_albedo(s2xr)
+                Index2DBA, predict2DBA = bsc.calculate_2DBA(s2xr)
+                mask2 = bsc.combine_masks(s2xr)
 
                 # 1) Retrieve projection info from S2 datafile and add to netcdf
                 proj_info = xr_cf_conventions.create_grid_mapping(s2xr.Data.attrs['crs'])
@@ -202,6 +201,7 @@ for tile in tiles:
                                                               s2xr.x, s2xr.y, proj_info)
 
                 # 3) add predicted map array and add metadata
+
                 predicted = predicted.fillna(0)
                 predicted = predicted.where(mask2 > 0)
                 predicted.encoding = {'dtype': 'int16', 'zlib': True, '_FillValue': -9999}
@@ -247,16 +247,15 @@ for tile in tiles:
                     print("\n NOW RUNNING SNICAR INVERSION FUNCTION \n")
                     
                     # run snicar inversion
-                    # set wavelength range from start, stop, step defined in config
-                    wlmin = config.get('options', 'wlmin'); wlmax = config.get('options', 'resolution'); 
-                    wlstep = config.get('options', 'resolution')
-                    wavelengths = np.arange(wlmin,wlmax,wlstep)
-                    idx = config.get('options', 'idx') # get S2 indexes from config
+                    wavelengths = np.arange(0.2,5,0.01)
 
-                    # call snicar inversion from isa file
-                    isa.invert_snicar_multi_LUT(s2xr, mask2, predicted, predict2DBA, wavelengths, idx, tile, year, month)
+                    idx = [29, 36, 46, 50, 54, 58, 66, 141, 200]
+
+                    #bsc.invert_snicar_single_LUT(s2xr.where(mask2>0), mask2, predicted, densities, grain_rds, algae, wavelengths,idx, tile, year, month)
+                    bsc.invert_snicar_multi_LUT(s2xr, mask2, predicted, predict2DBA, wavelengths, idx, tile, year, month)
 
                     # Add metadata to retrieved snicar parameter arrays + mask
+                    
                     with xr.open_dataarray(str(os.environ['PROCESS_DIR'] + 'density.nc')) as dens:
 
                         dens.encoding = {'dtype': 'float16', 'zlib': True, '_FillValue': -9999}
@@ -299,7 +298,7 @@ for tile in tiles:
                         'reff':(['x','y'], grain),
                         'algae':(['x','y'],algae),
                         'predict2DBA':(['x','y'],predict2DBA),
-
+                        'FinalMask': (['x', 'y'], mask2),
                         proj_info.attrs['grid_mapping_name']: proj_info,
                         'longitude': (['x', 'y'], lon),
                         'latitude': (['x', 'y'], lat)
@@ -323,30 +322,42 @@ for tile in tiles:
                     },
                         coords={'x': s2xr.x, 'y': s2xr.y})
 
+                if config.get('options','interpolate_cloud')=='True':
+                    dataset = sentinel2_tools.cloud_interpolator(dataset)
+
                 # add geo info
                 dataset = xr_cf_conventions.add_geo_info(dataset, 'x', 'y',
                                                          config.get('netcdf', 'author'),
                                                          config.get('netcdf', 'title'))
 
+                # if toggles, interpolate over missing values due to cloud cover
+                if config.get('options','interpolate_cloud')=='True':
+                    dataset = sentinel2_tools.cloud_interpolator(dataset)
 
-                # save netCDF to file
                 dataset.to_netcdf(savepath + "{}_{}_Classification_and_Albedo_Data.nc".format(tile, date), mode='w', format='NETCDF4_CLASSIC')
                 
-                # flush disk and expicit garbage collection
+                # flush dataset from disk
                 dataset = None
                 predicted = None
                 albedo = None
                 algae = None
-                grain = None
-                dz = None
-                dens = None
+
+                # explicitly call garbage collector to deallocate memory
+                print("GARBAGE COLLECTION\n")
                 gc.collect()
                         
-        # clear process directory of raw S2 files 
+        # clear process directory 
         sentinel2_tools.clear_img_directory(os.environ['PROCESS_DIR'])
 
-    # colate data into single netCDF and save to disk using function in sentinel2_tools.py
+    # interpolate missing tiles if toggled ON
+    if config.get('options','interpolate_missing_tiles')=='True':
+        print("\nINTERPOLATING MISSING TILES")
+        sentinel2_tools.imageinterpolator(years,months,tile,proj_info)
+    
+    gc.collect()
+
     dateList = sentinel2_tools.create_outData(tile,year,month,savepath)
+
 
     # save logs to csv files
     print("\n SAVING QC LOGS TO TXT FILES")
